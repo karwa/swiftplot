@@ -11,19 +11,11 @@ public struct BarGraph<SeriesType> where SeriesType: Sequence {
     var seriesData: SeriesType
     var adapter: StrideableAdapter<Element>
   
-    var stackData = [SeriesType]()
     var barLabels = [String]()
-  
     var series_info = Series<String,Int>()
-    var stackSeries_info = [Series<String,Int>]()
-  
     // BarGraph layout properties.
-    public enum GraphOrientation {
-        case vertical
-        case horizontal
-    }
-    public var graphOrientation: GraphOrientation = .vertical
-    public var minimumSeparation: Int = 20
+    public var graphOrientation = GraphOrientation.vertical
+    public var minimumSeparation = 20
   
   var originElement: Element
   
@@ -35,7 +27,6 @@ public struct BarGraph<SeriesType> where SeriesType: Sequence {
 }
 
 extension SequencePlots {
-  
   public func barChart(adapter: StrideableAdapter<Base.Element>, origin: Base.Element) -> BarGraph<Base> {
     return BarGraph(base, adapter: adapter, origin: origin)
   }
@@ -68,29 +59,11 @@ extension BarGraph {
     public mutating func addSeries(_ s: SeriesType) {
         seriesData = s
     }
-    
-    public mutating func addStackSeries(_ s: SeriesType) {
-// TODO: Re-enable in layout.
-//        precondition(series.count != 0 && series.count == s.count,
-//                     "Stack point count does not match the Series point count.")
-        stackData.append(s)
-        stackSeries_info.append(Series())
-    }
-    public mutating func addStackSeries(_ x: SeriesType,
-                               label: String,
-                               color: Color = .lightBlue,
-                               hatchPattern: BarGraphSeriesOptions.Hatching = .none) {
-      stackData.append(x)
-      stackSeries_info.append(Series(values: [],
-                                     label: label,
-                                     color: color,
-                                     hatchPattern: hatchPattern))
-    }
     public mutating func addSeries(values: SeriesType,
                           label: String,
                           color: Color = Color.lightBlue,
                           hatchPattern: BarGraphSeriesOptions.Hatching = .none,
-                          graphOrientation: BarGraph.GraphOrientation = .vertical){
+                          graphOrientation: GraphOrientation = .vertical){
       seriesData = values
       series_info = Series(values: [],
                            label: label,
@@ -125,42 +98,58 @@ extension BarGraph {
 extension BarGraph: HasGraphLayout & Plot {
     
     public var legendLabels: [(String, LegendIcon)] {
-        var legendSeries = stackSeries_info.map { ($0.label, LegendIcon.square($0.color)) }
-        legendSeries.insert((series_info.label, .square(series_info.color)), at: 0)
-        return legendSeries
+//        var legendSeries = stackSeries_info.map { ($0.label, LegendIcon.square($0.color)) }
+//        legendSeries.insert((series_info.label, .square(series_info.color)), at: 0)
+//        return legendSeries
+      []
     }
     
     public typealias DrawingData = BarGraphLayoutData
   
     // functions implementing plotting logic
-    public func _layoutData(size: Size, renderer: Renderer, getStackHeight: ()->Float?) -> (DrawingData, PlotMarkers?) {
+  public func _layoutData(size: Size, renderer: Renderer, getStackHeight: ()->(Float, Float)?) -> (DrawingData, PlotMarkers?) {
         
-        var results = DrawingData()
-        var markers = PlotMarkers()
+      var results = DrawingData()
+      results.orientation = graphOrientation
+      var markers = PlotMarkers()
       
-        switch graphOrientation {
-        case .vertical:
-          
-          // - Find the maximum/minimum elements.
-          var maxBarHeight: Float = 0
-          var minBarHeight: Float = 0
-          var count = 0
-          for element in seriesData {
-            count += 1
-            var thisBarHeight = adapter.distance(from: originElement, to: element)
-            thisBarHeight    += getStackHeight() ?? 0
-            maxBarHeight = max(maxBarHeight, thisBarHeight)
-            minBarHeight = min(minBarHeight, thisBarHeight)
-          }
-          while let extraStackHeight = getStackHeight() {
-            count += 1
-            maxBarHeight = max(maxBarHeight, extraStackHeight)
-            minBarHeight = min(minBarHeight, extraStackHeight)
-          }
-          if Float(count) > size.width {
-            print("⚠️ - Graph is too small. Less than 1 pixel per bar.")
-          }
-          
+      // - Find the maximum/minimum elements.
+      var maxBarHeight: Float = 0
+      var minBarHeight: Float = 0
+      var count = 0
+      for element in seriesData {
+        count += 1
+        var barHeight: (Float, Float) = (0, 0)
+        let seriesHeight = adapter.distance(from: originElement, to: element)
+        if seriesHeight > 0 {
+          barHeight.0 = seriesHeight
+        } else {
+          barHeight.1 = -1 * seriesHeight * -1
+        }
+        getStackHeight().map {
+          barHeight.0 += $0.0
+          barHeight.1 += -1 * $0.1 * -1
+        }
+        
+        maxBarHeight = max(maxBarHeight, barHeight.0)
+        maxBarHeight = max(maxBarHeight, barHeight.1)
+        minBarHeight = min(minBarHeight, barHeight.0)
+        minBarHeight = min(minBarHeight, barHeight.1)
+      }
+      while let extraStackHeight = getStackHeight() {
+        count += 1
+        maxBarHeight = max(maxBarHeight, extraStackHeight.0)
+        maxBarHeight = max(maxBarHeight, extraStackHeight.1)
+        minBarHeight = min(minBarHeight, extraStackHeight.0)
+        minBarHeight = min(minBarHeight, extraStackHeight.1)
+      }
+      if Float(count) > size.width {
+        print("⚠️ - Graph is too small. Less than 1 pixel per bar.")
+      }
+      guard count > 0 else { return (results, markers) }
+      
+      switch graphOrientation {
+      case .vertical:
           // - Calculate margins, origin, scale, etc.
           var hasTopMargin = true
           var hasBottomMargin = true
@@ -182,22 +171,22 @@ extension BarGraph: HasGraphLayout & Plot {
           let dataHeight  = size.height - (hasTopMargin ? yMarginSize : 0)
                                         - (hasBottomMargin ? yMarginSize : 0)
           
-          results.scaleY = dataHeight / (maxBarHeight - minBarHeight)
+          results.scale = dataHeight / (maxBarHeight - minBarHeight)
           
-          results.origin.y = abs(minBarHeight * results.scaleY)
+          results.origin.y = abs(minBarHeight * results.scale)
                              + (hasBottomMargin ? yMarginSize : 0)
           results.origin.y.round()
           
           // Round the bar width to an integer size.
           let totalSeparation = Float((count + 1) * minimumSeparation)
           let spaceForBars    = size.width - totalSeparation
-          results.barWidth = Int((spaceForBars / Float(count)).rounded(.down))
-          results.barWidth = max(results.barWidth, 1)
+          results.barSize = Int((spaceForBars / Float(count)).rounded(.down))
+          results.barSize = max(results.barSize, 1)
           // The rounding may have introduced a large space at the end.
           // e.g. 800 bars in 900 pixels gives 1 pixel/bar and 100 pixels space!
           // Distribute the space as additional separation.
           // Even though this un-integers the bar locations, it results in overall better charts.
-          results.space = (size.width - Float(count * results.barWidth)) / Float(count + 1)
+          results.space = (size.width - Float(count * results.barSize)) / Float(count + 1)
           // Requiring 1 pixel per bar means we can't always honour the minimum separation.
           if results.space < Float(minimumSeparation) {
             print("⚠️ - Not enough space to honour minimum separation. " +
@@ -215,7 +204,7 @@ extension BarGraph: HasGraphLayout & Plot {
             v1 = Float(pow(Float(10), Float(0)))
           }
           
-          let nY: Float = v1*results.scaleY
+          let nY: Float = v1*results.scale
           var inc1: Float = nY
           if(size.height/nY > MAX_DIV){
             inc1 = (size.height/nY)*inc1/MAX_DIV
@@ -228,14 +217,14 @@ extension BarGraph: HasGraphLayout & Plot {
               continue
             }
             markers.yMarkers.append(yM)
-            let text = "\(( (yM - results.origin.y) / results.scaleY ).rounded())"
+            let text = "\( ((yM - results.origin.y) / results.scale ).rounded() )"
             markers.yMarkersText.append(text)
             yM = yM + inc1
           }
           yM = results.origin.y - inc1
           while yM>0.0 {
             markers.yMarkers.append(yM)
-            markers.yMarkersText.append("\(round((yM-results.origin.y)/results.scaleY))")
+            markers.yMarkersText.append("\( ((yM - results.origin.y) / results.scale ).rounded() )")
             yM = yM - inc1
           }
           
@@ -244,180 +233,167 @@ extension BarGraph: HasGraphLayout & Plot {
           // TODO: Allow setting x-markers.
           var i = 0
           for value in seriesData {
-            markers.xMarkers.append(results.xMarkerLocationForBar(i))
+            markers.xMarkers.append(results.axisMarkerLocationForBar(i))
             markers.xMarkersText.append(String(describing: value))
             i += 1
           }
           for _ in i..<count {
-            markers.xMarkers.append(results.xMarkerLocationForBar(i))
+            markers.xMarkers.append(results.axisMarkerLocationForBar(i))
             markers.xMarkersText.append("")
             i += 1
           }
           
         case .horizontal:
-          break
-//          results.barWidth = Int(round(size.height/Float(series.count)))
-//          maximumX = maxY(points: series.values)
-//          minimumX = minY(points: series.values)
-//
-//          var maximumX: U = U(0)
-//          var minimumX: U = U(0)
-//
-//            var x = maxY(points: series.values)
-//            if (x > maximumX) {
-//                maximumX = x
-//            }
-//            x = minY(points: series.values)
-//            if (x < minimumX) {
-//                minimumX = x
-//            }
-//
-//            for s in stackSeries {
-//                let minStackX = minY(points: s.values)
-//                let maxStackX = maxY(points: s.values)
-//                maximumX = maximumX + maxStackX
-//                minimumX = minimumX - minStackX
-//            }
-//
-//            if minimumX >= U(0) {
-//                results.origin = zeroPoint
-//                minimumX = U(0)
-//            }
-//            else{
-//                results.origin = Point((size.width/Float(maximumX-minimumX))*Float(U(-1)*minimumX), 0.0)
-//            }
-//
-//            let rightScaleMargin: Float = size.width * 0.1
-//            results.scaleX = Float(maximumX - minimumX) / (size.width - rightScaleMargin)
-//
-//            let nD1: Int = max(getNumberOfDigits(Float(maximumX)), getNumberOfDigits(Float(minimumX)))
-//            var v1: Float
-//            if (nD1 > 1 && maximumX <= U(pow(Float(10), Float(nD1 - 1)))) {
-//                v1 = Float(pow(Float(10), Float(nD1 - 2)))
-//            } else if (nD1 > 1) {
-//                v1 = Float(pow(Float(10), Float(nD1 - 1)))
-//            } else {
-//                v1 = Float(pow(Float(10), Float(0)))
-//            }
-//
-//            let nX: Float = v1/results.scaleX
-//            var inc1: Float = nX
-//            if(size.width/nX > MAX_DIV){
-//                inc1 = (size.width/nX)*inc1/MAX_DIV
-//            }
-//
-//            var xM = results.origin.x
-//            while xM<=size.width {
-//                if(xM+inc1<0.0 || xM<0.0){
-//                    xM = xM + inc1
-//                    continue
-//                }
-//                markers.xMarkers.append(xM)
-//                markers.xMarkersText.append("\(ceil(results.scaleX*(xM-results.origin.x)))")
-//                xM = xM + inc1
-//            }
-//            xM = results.origin.x - inc1
-//            while xM>0.0 {
-//                markers.xMarkers.append(xM)
-//                markers.xMarkersText.append("\(floor(results.scaleX*(xM-results.origin.x)))")
-//                xM = xM - inc1
-//            }
-//
-//            func yMarkerLocationForBar(_ index: Int) -> Float {
-//                Float(index*results.barWidth) + Float(results.barWidth)*Float(0.5)
-//            }
-//            func yLocationForBar(_ index: Int) -> Float {
-//                yMarkerLocationForBar(index) - Float(results.barWidth)*Float(0.5) + Float(space)*Float(0.5)
-//            }
-//            for i in 0..<series.count {
-//                markers.yMarkers.append(yMarkerLocationForBar(i))
-//                markers.yMarkersText.append("\(series[i].x)")
-//            }
-//
-//            // scale points to be plotted according to plot size
-//            let scaleXInv: Float = 1.0/results.scaleX
-//            results.series_scaledValues = (0..<series.values.count).map { i in
-//                let pt = series.values[i]
-//                return Pair(Float(pt.y*U(scaleXInv)+U(results.origin.x)), yLocationForBar(i))
-//            }
-//            results.stackSeries_scaledValues = stackSeries.map { series in
-//                (0..<series.values.count).map { i in
-//                    let pt = series.values[i]
-//                    return Pair(Float(pt.y*U(scaleXInv)+U(results.origin.x)), yLocationForBar(i))
-//                }
-//            }
-        }
-        return (results, markers)
-    }
+          // - Calculate margins, origin, scale, etc.
+          var hasLeftMargin = true
+          var hasRightMargin = true
+          if maxBarHeight < 0 {
+            // maxElement < origin. All bars are below the origin.
+            maxBarHeight = 0
+            results.origin = Point(size.width, 0)
+            hasLeftMargin = false
+            // FIXME: plot markers on top?
+          }
+          if minBarHeight >= 0 {
+            // minElement >= origin. All bars are above the origin.
+            minBarHeight = 0
+            results.origin = zeroPoint
+            hasRightMargin = false
+          }
+          
+          let xMarginSize = size.width * 0.1
+          let dataWidth  = size.width - (hasLeftMargin ? xMarginSize : 0)
+                                      - (hasRightMargin ? xMarginSize : 0)
+          
+          results.scale = dataWidth / (maxBarHeight - minBarHeight)
+          
+          results.origin.x = abs(minBarHeight * results.scale)
+                             + (hasLeftMargin ? xMarginSize : 0)
+          results.origin.x.round()
+          
+          // Round the bar width to an integer size.
+          let totalSeparation = Float((count + 1) * minimumSeparation)
+          let spaceForBars    = size.height - totalSeparation
+          results.barSize = Int((spaceForBars / Float(count)).rounded(.down))
+          results.barSize = max(results.barSize, 1)
+          // The rounding may have introduced a large space at the end.
+          // e.g. 800 bars in 900 pixels gives 1 pixel/bar and 100 pixels space!
+          // Distribute the space as additional separation.
+          // Even though this un-integers the bar locations, it results in overall better charts.
+          results.space = (size.height - Float(count * results.barSize)) / Float(count + 1)
+          // Requiring 1 pixel per bar means we can't always honour the minimum separation.
+          if results.space < Float(minimumSeparation) {
+            print("⚠️ - Not enough space to honour minimum separation. " +
+                  "Bars would be less than 1 pixel.")
+          }
 
-    //functions to draw the plot
+          let nD1: Int = max(getNumberOfDigits(Float(maxBarHeight)), getNumberOfDigits(Float(minBarHeight)))
+          var v1: Float
+          if nD1 > 1 && maxBarHeight <= pow(Float(10), Float(nD1 - 1)) {
+            v1 = Float(pow(Float(10), Float(nD1 - 2)))
+          } else if (nD1 > 1) {
+            v1 = Float(pow(Float(10), Float(nD1 - 1)))
+          } else {
+            v1 = Float(pow(Float(10), Float(0)))
+          }
+          
+          let nX: Float = v1 * results.scale
+          var inc1: Float = nX
+          if(size.width/nX > MAX_DIV){
+            inc1 = (size.width/nX)*inc1/MAX_DIV
+          }
+          
+          var xM = results.origin.x
+          while xM<=size.width {
+            if(xM+inc1<0.0 || xM<0.0){
+              xM = xM + inc1
+              continue
+            }
+            markers.xMarkers.append(xM)
+            markers.xMarkersText.append("\( ((xM - results.origin.x) / results.scale).rounded() )")
+            xM = xM + inc1
+          }
+          xM = results.origin.x - inc1
+          while xM>0.0 {
+            markers.xMarkers.append(xM)
+            markers.xMarkersText.append("\( ((xM - results.origin.x) / results.scale).rounded() )")
+            xM = xM - inc1
+          }
+
+        // - Calculate Y marker locations.
+        // TODO: Do not show all y-markers if there are too many bars.
+        // TODO: Allow setting y-markers.
+        var i = 0
+        for value in seriesData {
+          markers.yMarkers.append(results.axisMarkerLocationForBar(i))
+          markers.yMarkersText.append(String(describing: value))
+          i += 1
+        }
+        for _ in i..<count {
+          markers.yMarkers.append(results.axisMarkerLocationForBar(i))
+          markers.yMarkersText.append("")
+          i += 1
+        }
+      }
+      return (results, markers)
+  }
+  
+  //functions to draw the plot
   public func _drawData(_ data: DrawingData, size: Size, renderer: Renderer, drawStack: (inout BarLayoutData)->Bool) {
     switch graphOrientation {
     case .vertical:
       var barIndex = 0
       for seriesValue in seriesData {
         // Draw the bar from the main series.
-        let seriesHeight = (adapter.distance(from: originElement, to: seriesValue) * data.scaleY).rounded(.up)
-        let rect = Rect(origin: Point(data.xLocationForBar(barIndex), data.origin.y),
-                        size: Size(width: Float(data.barWidth), height: seriesHeight))
+        let seriesHeight = (adapter.distance(from: originElement, to: seriesValue) * data.scale).rounded(.up)
+        let rect = Rect(origin: Point(data.axisLocationForBar(barIndex), data.origin.y),
+                        size: Size(width: Float(data.barSize), height: seriesHeight))
         renderer.drawSolidRect(rect,
                                fillColor: series_info.color,
                                hatchPattern: series_info.barGraphSeriesOptions.hatchPattern)
         // Call up the stack chain to draw their segments.
-        var barLayoutData = BarLayoutData(layout: data, xLocation: rect.minX,
+        var barLayoutData = BarLayoutData(layout: data, axisLocation: rect.minX,
                                           positiveValueHeight: rect.height > 0 ? rect.height : 0,
                                           negativeValueHeight: rect.height < 0 ? -1 * rect.height : 0)
         _ = drawStack(&barLayoutData)
         barIndex += 1
       }
       // Consume any remaining bars from the stack chain.
-      var barLayoutData = BarLayoutData(layout: data, xLocation: data.xLocationForBar(barIndex),
+      var barLayoutData = BarLayoutData(layout: data, axisLocation: data.axisLocationForBar(barIndex),
                                         positiveValueHeight: 0, negativeValueHeight: 0)
       while drawStack(&barLayoutData) {
         barIndex += 1
-        barLayoutData = BarLayoutData(layout: data, xLocation: data.xLocationForBar(barIndex),
+        barLayoutData = BarLayoutData(layout: data, axisLocation: data.axisLocationForBar(barIndex),
                                       positiveValueHeight: 0, negativeValueHeight: 0)
       }
           
-        case .horizontal:
-          break
-//            for index in 0..<series.count {
-//                var currentWidthPositive: Float = 0
-//                var currentWidthNegative: Float = 0
-//                var rect = Rect(
-//                    origin: Point(data.origin.x, data.series_scaledValues[index].y),
-//                    size: Size(
-//                        width: data.series_scaledValues[index].x - data.origin.x,
-//                        height: Float(data.barWidth - space))
-//                )
-//                if (rect.size.width >= 0) {
-//                    currentWidthPositive = rect.size.width
-//                }
-//                else {
-//                    currentWidthNegative = rect.size.width
-//                }
-//                renderer.drawSolidRect(rect,
-//                                       fillColor: series.color,
-//                                       hatchPattern: series.barGraphSeriesOptions.hatchPattern)
-//                for i in 0..<stackSeries.count {
-//                    let stackValue = Float(data.stackSeries_scaledValues[i][index].x)
-//                    if (stackValue - data.origin.x >= 0) {
-//                        rect.origin.x = data.origin.x + currentWidthPositive
-//                        rect.size.width = stackValue - data.origin.x
-//                        currentWidthPositive += stackValue
-//                    }
-//                    else {
-//                        rect.origin.x = data.origin.x - currentWidthNegative - stackValue
-//                        rect.size.width = stackValue - data.origin.x
-//                        currentWidthNegative += stackValue
-//                    }
-//                    renderer.drawSolidRect(rect,
-//                                           fillColor: stackSeries[i].color,
-//                                           hatchPattern: stackSeries[i].barGraphSeriesOptions.hatchPattern)
-//                }
-//            }
-        }
+    case .horizontal:
+      var barIndex = 0
+      for seriesValue in seriesData {
+        // Draw the bar from the main series.
+        let seriesWidth = (adapter.distance(from: originElement, to: seriesValue) * data.scale).rounded(.up)
+        let rect = Rect(origin: Point(data.origin.x, data.axisLocationForBar(barIndex)),
+                        size: Size(width: seriesWidth, height: Float(data.barSize)))
+        renderer.drawSolidRect(rect,
+                               fillColor: series_info.color,
+                               hatchPattern: series_info.barGraphSeriesOptions.hatchPattern)
+        // Call up the stack chain to draw their segments.
+        var barLayoutData = BarLayoutData(layout: data, axisLocation: rect.minY,
+                                          positiveValueHeight: rect.width > 0 ? rect.width : 0,
+                                          negativeValueHeight: rect.width < 0 ? -1 * rect.width : 0)
+        _ = drawStack(&barLayoutData)
+        barIndex += 1
+      }
+      // Consume any remaining bars from the stack chain.
+      var barLayoutData = BarLayoutData(layout: data, axisLocation: data.axisLocationForBar(barIndex),
+                                        positiveValueHeight: 0, negativeValueHeight: 0)
+      while drawStack(&barLayoutData) {
+        barIndex += 1
+        barLayoutData = BarLayoutData(layout: data, axisLocation: data.axisLocationForBar(barIndex),
+                                      positiveValueHeight: 0, negativeValueHeight: 0)
+      }
     }
+  }
 }
 
 public struct StrideableAdapter<T> {
@@ -471,23 +447,28 @@ extension StrideableAdapter {
   }
 }
 
-// Note: This cannot be nested in the BarGraph because we
-// need it to be non-generic for stacking.
+// Note: These cannot be nested in the BarGraph because we
+// need them to be non-generic for stacking.
+public enum GraphOrientation {
+    case vertical
+    case horizontal
+}
+
 public struct BarGraphLayoutData {
-    var scaleY: Float = 1
-    var scaleX: Float = 1
-    var barWidth : Int = 0
-    var origin = zeroPoint
-    var space: Float = 0
+  var scale: Float = 1
+  var orientation = GraphOrientation.vertical
+  var barSize = 0
+  var origin = zeroPoint
+  var space: Float = 0
   
-    func xLocationForBar(_ index: Int) -> Float {
-        Float(index * barWidth)     // bar widths.
-        + Float(index + 1) * space  // spacing.
-    }
-    func xMarkerLocationForBar(_ index: Int) -> Float {
-        xLocationForBar(index)
-        + Float(barWidth) * 0.5  // center on bar.
-    }
+  func axisLocationForBar(_ index: Int) -> Float {
+    Float(index * barSize)     // bar widths.
+      + Float(index + 1) * space  // spacing.
+  }
+  func axisMarkerLocationForBar(_ index: Int) -> Float {
+    axisLocationForBar(index)
+      + Float(barSize) * 0.5  // center on bar.
+  }
 }
 
 // Stacking prototype.
@@ -495,29 +476,52 @@ public struct BarGraphLayoutData {
 
 public struct BarLayoutData {
   var layout: BarGraphLayoutData
-  var xLocation: Float
+  var axisLocation: Float
   var positiveValueHeight: Float
   var negativeValueHeight: Float
 }
 
-public protocol BarGraphProtocol: Plot, HasGraphLayout {
-  associatedtype Parent: BarGraphProtocol
-  var parent: Parent? { get set }
+public protocol _BarGraphProtocol: Plot, HasGraphLayout {
+  associatedtype Parent: _BarGraphProtocol
   
-  func _layoutData(size: Size, renderer: Renderer, getStackHeight: ()->Float?) -> (DrawingData, PlotMarkers?)
+  /// The stack or series below this element of the `BarGraph`.
+  /// The root `BarGraph` is its own parent, so this chain never terminates.
+  var parent: Parent { get set }
   
+  // Lays out the bar from this segment down.
+  // `getStackHeight` returns a tuple of (positiveSegmentHeight, negativeSegmentHeight).
+  func _layoutData(size: Size, renderer: Renderer, getStackHeight: ()->(Float, Float)?) -> (DrawingData, PlotMarkers?)
+  
+  // Draws the bar from this segment down.
+  // Update the `BarLayoutData` to let successive segments know the positive/negative bar height.
   func _drawData(_ data: DrawingData, size: Size, renderer: Renderer,
                  drawStack: (inout BarLayoutData)->Bool)
+ 
+  // A magic associated type which gets funnelled down the chain of generic wrappers,
+  // finally terminating at the root `BarGraph`
+  associatedtype _RootBarGraphSeriesType: Sequence
+  
+  /// The `BarGraph`.
+  var barGraph: BarGraph<_RootBarGraphSeriesType> { get set }
 }
 
-extension BarGraph: BarGraphProtocol {
-  public var parent: Self? {
-    get { return nil }
-    set { fatalError() }
+extension BarGraph: _BarGraphProtocol {
+  public typealias Parent = Self
+  public typealias _RootBarGraphSeriesType = SeriesType
+  
+  public var parent: Self {
+    get { return self }
+    _modify { yield &self }
+    set { self = newValue }
+  }
+  public var barGraph: BarGraph<SeriesType> {
+    get { return self }
+    _modify { yield &self }
+    set { self = newValue }
   }
 }
 
-extension BarGraphProtocol {
+extension _BarGraphProtocol {
   
   public func layoutData(size: Size, renderer: Renderer) -> (DrawingData, PlotMarkers?) {
     // This gets called when we are at the top of the stack.
@@ -538,7 +542,7 @@ extension BarGraphProtocol {
 
 
 
-public struct StackedBarGraph<Base, SeriesType> where SeriesType: Sequence, Base: BarGraphProtocol {
+public struct StackedBarGraph<Base, SeriesType> where SeriesType: Sequence, Base: _BarGraphProtocol {
   public typealias Element = SeriesType.Element
   
   var base: Base
@@ -559,15 +563,20 @@ extension StackedBarGraph: Plot & HasGraphLayout {
     var baseData: Base.DrawingData!
   }
   
-  public func _layoutData(size: Size, renderer: Renderer, getStackHeight: ()->Float?) -> (DrawingData, PlotMarkers?) {
+  public func _layoutData(size: Size, renderer: Renderer, getStackHeight: ()->(Float, Float)?) -> (DrawingData, PlotMarkers?) {
     
     // Calculate maximum/minimum/count, and pass it down to base.
-    
+    // FIXME: positive and negative segments need to be accumulated separately.
     var it = values.makeIterator()
     let baseResults = base._layoutData(size: size, renderer: renderer, getStackHeight: {
       let base = getStackHeight()
       if let nextValue = it.next() {
-        return (base ?? 0) + adapter.distance(from: origin, to: nextValue)
+        let segmentHeight = adapter.distance(from: origin, to: nextValue)
+        if segmentHeight > 0 {
+          return ((base?.0 ?? 0) + segmentHeight, base?.1 ?? 0)
+        } else {
+          return (base?.0 ?? 0, (base?.1 ?? 0) + segmentHeight)
+        }
       }
       return base
     })
@@ -582,21 +591,37 @@ extension StackedBarGraph: Plot & HasGraphLayout {
       var shouldContinue: Bool
       // Draw our stack segment.
       if let nextValue = it.next() {
-        let segmentHeight = adapter.distance(from: origin, to: nextValue) * layoutInfo.layout.scaleY
-        var segmentRect = Rect(origin: Point(layoutInfo.xLocation,
-                                             layoutInfo.layout.origin.y + layoutInfo.positiveValueHeight),
-                               size: Size(width: Float(layoutInfo.layout.barWidth), height: segmentHeight))
-        if segmentHeight < 0 {
-          segmentRect.origin.y = layoutInfo.layout.origin.y - layoutInfo.negativeValueHeight
-          layoutInfo.negativeValueHeight += -1 * segmentHeight
-        } else {
-           layoutInfo.positiveValueHeight += segmentHeight
+        let segmentHeight = adapter.distance(from: origin, to: nextValue) * layoutInfo.layout.scale
+        var segmentRect: Rect
+        switch layoutInfo.layout.orientation {
+        case .vertical:
+          segmentRect = Rect(origin: Point(layoutInfo.axisLocation,
+                                           layoutInfo.layout.origin.y + layoutInfo.positiveValueHeight),
+                             size: Size(width: Float(layoutInfo.layout.barSize), height: segmentHeight))
+          if segmentHeight < 0 {
+            segmentRect.origin.y = layoutInfo.layout.origin.y - layoutInfo.negativeValueHeight
+            layoutInfo.negativeValueHeight += -1 * segmentHeight
+          } else {
+            layoutInfo.positiveValueHeight += segmentHeight
+          }
+          
+        case .horizontal:
+          segmentRect = Rect(origin: Point(layoutInfo.layout.origin.x + layoutInfo.positiveValueHeight,
+                                           layoutInfo.axisLocation),
+                             size: Size(width: segmentHeight, height: Float(layoutInfo.layout.barSize)))
+          if segmentHeight < 0 {
+            segmentRect.origin.x = layoutInfo.layout.origin.x - layoutInfo.negativeValueHeight
+            layoutInfo.negativeValueHeight += -1 * segmentHeight
+          } else {
+            layoutInfo.positiveValueHeight += segmentHeight
+          }
         }
-        renderer.drawSolidRect(segmentRect, fillColor: segmentColor, hatchPattern: .none)
+        renderer.drawSolidRect(segmentRect.normalized, fillColor: segmentColor, hatchPattern: .none)
         shouldContinue = true
       } else {
         shouldContinue = false
       }
+      
       // Draw the next segment in the chain.
       let shouldParentContinue = drawStack(&layoutInfo)
       return shouldContinue || shouldParentContinue
@@ -604,10 +629,17 @@ extension StackedBarGraph: Plot & HasGraphLayout {
   }
 }
 
-extension StackedBarGraph: BarGraphProtocol {
+extension StackedBarGraph: _BarGraphProtocol {
   
-  public var parent: Base? {
+  public var parent: Base {
     get { return base }
-    set { base = newValue! }
+    _modify { yield &base }
+    set { base = newValue }
+  }
+  
+  public var barGraph: BarGraph<Base._RootBarGraphSeriesType> {
+    get { return base.barGraph }
+    _modify { yield &base.barGraph }
+    set { base.barGraph = newValue }
   }
 }
