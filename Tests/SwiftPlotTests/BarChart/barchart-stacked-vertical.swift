@@ -18,17 +18,19 @@ extension BarchartTests {
     let y:[Float] = [320,-100,420,500]
     let y1:[Float] = [100,100,220,245]
 
-    var barGraph = y.plots
-    .barChart(origin: 0)
-    .stackedWith(y1, adapter: .linear, origin: 0)
-    
-    barGraph.barGraph.color = .orange
-    barGraph.segmentColor = .blue
-    barGraph.barGraph.formatter = .array(x)
-    
-//    barGraph.addSeries(x, y, label: "Plot 1", color: .orange)
-    barGraph.plotTitle = PlotTitle("BAR CHART")
-    barGraph.plotLabel = PlotLabel(xLabel: "X-AXIS", yLabel: "Y-AXIS")
+    let barGraph = y.plots.barChart() { graph in
+      graph.color = .orange
+      graph.graphOrientation = .horizontal
+      
+      graph.label = "Plot 1"
+      graph.formatter = .array(x)
+      graph.plotTitle.title = "BAR CHART"
+      graph.plotLabel.xLabel = "X-AXIS"
+      graph.plotLabel.yLabel = "Y-AXIS"
+    }.stackedWith(y1) { stack in
+      stack.segmentColor = .blue
+      stack.segmentLabel = "Plot 2"
+    }
     
     let svg_renderer = SVGRenderer()
     try barGraph.drawGraphAndOutput(fileName: svgOutputDirectory+fileName,

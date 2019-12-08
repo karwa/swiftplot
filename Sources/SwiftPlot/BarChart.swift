@@ -70,45 +70,6 @@ Base.Element: ExpressibleByIntegerLiteral {
   }
 }
 
-
-extension BarGraph {
-  
-  public init(enableGrid: Bool = false){
-    fatalError()
-    self.enableGrid = enableGrid
-  }
-}
-
-// Setting data.
-
-extension BarGraph {
-
-    public mutating func addSeries(_ s: SeriesType) {
-        values = s
-    }
-    public mutating func addSeries(values: SeriesType,
-                          label: String,
-                          color: Color = Color.lightBlue,
-                          hatchPattern: BarGraphSeriesOptions.Hatching = .none,
-                          graphOrientation: GraphOrientation = .vertical){
-      self.values = values
-      self.label = label
-      self.color = color
-      self.hatchPattern = hatchPattern
-      self.graphOrientation = graphOrientation
-    }
-//    public mutating func addSeries(_ x: [String],
-//                          _ y: [U],
-//                          label: String,
-//                          color: Color = Color.lightBlue,
-//                          hatchPattern: BarGraphSeriesOptions.Hatching = .none,
-//                          graphOrientation: BarGraph.GraphOrientation = .vertical){
-//        self.addSeries(values: zip(x, y).map { Pair($0.0, $0.1) },
-//                       label: label, color: color, hatchPattern: hatchPattern,
-//                       graphOrientation: graphOrientation)
-//    }
-}
-
 // Layout properties.
 
 extension BarGraph {
