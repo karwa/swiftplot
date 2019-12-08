@@ -95,14 +95,14 @@ extension BarGraph: _BarGraphProtocol {
           // - Calculate margins, origin, scale, etc.
           var hasTopMargin = true
           var hasBottomMargin = true
-          if maxBarHeight < 0 {
+          if minBarHeight < 0 && maxBarHeight <= 0 {
             // maxElement < origin. All bars are below the origin.
             maxBarHeight = 0
             results.origin = Point(0, size.height)
             hasTopMargin = false
             // FIXME: plot markers on top?
           }
-          if minBarHeight >= 0 {
+          if maxBarHeight >= 0 && minBarHeight >= 0 {
             // minElement >= origin. All bars are above the origin.
             minBarHeight = 0
             results.origin = zeroPoint
@@ -189,18 +189,18 @@ extension BarGraph: _BarGraphProtocol {
           // - Calculate margins, origin, scale, etc.
           var hasLeftMargin = true
           var hasRightMargin = true
-          if maxBarHeight < 0 {
+          if minBarHeight < 0 && maxBarHeight <= 0 {
             // maxElement < origin. All bars are below the origin.
             maxBarHeight = 0
             results.origin = Point(size.width, 0)
-            hasLeftMargin = false
+            hasRightMargin = false
             // FIXME: plot markers on top?
           }
-          if minBarHeight >= 0 {
+          if maxBarHeight >= 0 && minBarHeight >= 0 {
             // minElement >= origin. All bars are above the origin.
             minBarHeight = 0
             results.origin = zeroPoint
-            hasRightMargin = false
+            hasLeftMargin = false
           }
           
           let xMarginSize = size.width * 0.1
@@ -345,6 +345,9 @@ public struct TextFormatter<T> {
   }
   public static var `default`: TextFormatter<T> {
     return TextFormatter { val, idx in String(describing: val) }
+  }
+  public static var index: TextFormatter<T> {
+    return TextFormatter { _, idx in String(idx) }
   }
   public static func custom(_ formatter: @escaping (T, Int)->String) -> TextFormatter<T> {
     return TextFormatter(custom: formatter)
