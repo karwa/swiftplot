@@ -9,7 +9,7 @@ public struct BarGraph<SeriesType> where SeriesType: Sequence {
     public var layout = GraphLayout()
     // Data.
     var seriesData: SeriesType
-    var interpolator: Interpolator<Element>
+    var adapter: StrideableAdapter<Element>
   
     var stackData = [SeriesType]()
     var barLabels = [String]()
@@ -25,21 +25,31 @@ public struct BarGraph<SeriesType> where SeriesType: Sequence {
     public var graphOrientation: GraphOrientation = .vertical
     public var minimumSeparation: Int = 20
   
-  var distanceFunc: (Element, Element) -> Float
   var originElement: Element
   
-  public init(_ data: SeriesType, interpolator: Interpolator<Element>, origin: Element, distanceFunc: @escaping (Element, Element)->Float) {
+  public init(_ data: SeriesType, adapter: StrideableAdapter<Element>, origin: Element) {
     self.seriesData = data
-    self.interpolator = interpolator
-    self.distanceFunc = distanceFunc
+    self.adapter = adapter
     self.originElement = origin
   }
 }
 
 extension SequencePlots {
   
-  public func barChart(interpolator: Interpolator<Base.Element>, origin: Base.Element, distanceFunc: @escaping (Base.Element, Base.Element)->Float) -> BarGraph<Base> {
-    return BarGraph(base, interpolator: interpolator, origin: origin, distanceFunc: distanceFunc)
+  public func barChart(adapter: StrideableAdapter<Base.Element>, origin: Base.Element) -> BarGraph<Base> {
+    return BarGraph(base, adapter: adapter, origin: origin)
+  }
+}
+
+extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FloatConvertible {
+  public func barChart(origin: Base.Element) -> BarGraph<Base> {
+    return BarGraph(base, adapter: .linear, origin: origin)
+  }
+}
+
+extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FixedWidthInteger {
+  public func barChart(origin: Base.Element) -> BarGraph<Base> {
+    return BarGraph(base, adapter: .linear, origin: origin)
   }
 }
 
@@ -136,9 +146,13 @@ extension BarGraph: HasGraphLayout & Plot {
             + Float(barWidth) * 0.5  // center on bar.
         }
     }
+  
+  public func layoutData(size: Size, renderer: Renderer) -> (DrawingData, PlotMarkers?) {
+    return _layoutData(size: size, renderer: renderer)
+  }
     
     // functions implementing plotting logic
-    public func layoutData(size: Size, renderer: Renderer) -> (DrawingData, PlotMarkers?) {
+    public func _layoutData(size: Size, renderer: Renderer) -> (DrawingData, PlotMarkers?) {
         
         var results = DrawingData()
         var markers = PlotMarkers()
@@ -154,35 +168,35 @@ extension BarGraph: HasGraphLayout & Plot {
           var count = 0
           for item in seriesData {
             count += 1
-            maxElement = interpolator.compare(maxElement, item) ? item : maxElement
-            minElement = interpolator.compare(minElement, item) ? minElement : item
+            maxElement = adapter.compare(maxElement, item) ? item : maxElement
+            minElement = adapter.compare(minElement, item) ? minElement : item
           }
           if Float(count) > size.width {
             print("⚠️ - Graph is too small. Less than 1 pixel per bar.")
           }
           
           for s in stackData {
-            guard let minStackY = s.min(by: interpolator.compare),
-                  let maxStackY = s.max(by: interpolator.compare) else {
+            guard let minStackY = s.min(by: adapter.compare),
+                  let maxStackY = s.max(by: adapter.compare) else {
                     continue // Empty stack.
             }
             // FIXME: Should we not instead be calculating the extent of each bar?
             // i.e. (series[0] + stacks[...][0]) vs (series[1] + stacks[...][1]), etc?
-            maxElement = interpolator.compare(maxElement, maxStackY) ? maxStackY : maxElement
-            minElement = interpolator.compare(minElement, minStackY) ? minElement : minStackY
+            maxElement = adapter.compare(maxElement, maxStackY) ? maxStackY : maxElement
+            minElement = adapter.compare(minElement, minStackY) ? minElement : minStackY
           }
           
           // - Calculate margins, origin, scale, etc.
           var hasTopMargin = true
           var hasBottomMargin = true
-          if interpolator.compare(maxElement, originElement) {
+          if adapter.compare(maxElement, originElement) {
             // maxElement < origin. All bars are below the origin.
             maxElement = originElement
             results.origin = Point(0, size.height)
             hasTopMargin = false
             // FIXME: plot markers on top?
           }
-          if interpolator.compare(minElement, originElement) == false {
+          if adapter.compare(minElement, originElement) == false {
             // minElement >= origin. All bars are above the origin.
             minElement = originElement
             results.origin = zeroPoint
@@ -193,9 +207,9 @@ extension BarGraph: HasGraphLayout & Plot {
           let dataHeight  = size.height - (hasTopMargin ? yMarginSize : 0)
                                         - (hasBottomMargin ? yMarginSize : 0)
           
-          results.scaleY = dataHeight / distanceFunc(minElement, maxElement)
+          results.scaleY = dataHeight / adapter.distance(from: minElement, to: maxElement)
           
-          results.origin.y = abs(distanceFunc(originElement, minElement) * results.scaleY)
+          results.origin.y = abs(adapter.distance(from: originElement, to: minElement) * results.scaleY)
                              + (hasBottomMargin ? yMarginSize : 0)
           results.origin.y.round()
           
@@ -216,9 +230,9 @@ extension BarGraph: HasGraphLayout & Plot {
           }
           
           // - Calculate Y marker locations.
-          let nD1: Int = max(getNumberOfDigits(distanceFunc(originElement, maxElement)), getNumberOfDigits(distanceFunc(originElement, minElement)))
+          let nD1: Int = max(getNumberOfDigits(adapter.distance(from: originElement, to: maxElement)), getNumberOfDigits(adapter.distance(from: originElement, to:  minElement)))
           var v1: Float
-          if nD1 > 1 && distanceFunc(originElement, maxElement) <= pow(Float(10), Float(nD1 - 1)) {
+          if nD1 > 1 && adapter.distance(from: originElement, to: maxElement) <= pow(Float(10), Float(nD1 - 1)) {
             v1 = Float(pow(Float(10), Float(nD1 - 2)))
           } else if (nD1 > 1) {
             v1 = Float(pow(Float(10), Float(nD1 - 1)))
@@ -365,7 +379,7 @@ extension BarGraph: HasGraphLayout & Plot {
               origin: Point(data.xLocationForBar(seriesIndex), data.origin.y),
               size: Size(
                 width: Float(data.barWidth),
-                height: (distanceFunc(originElement, seriesValue) * data.scaleY).rounded(.up)
+                height: (adapter.distance(from: originElement, to: seriesValue) * data.scaleY).rounded(.up)
               )
             )
             if (rect.size.height >= 0) {
@@ -435,4 +449,126 @@ extension BarGraph: HasGraphLayout & Plot {
 //            }
         }
     }
+}
+
+public struct StrideableAdapter<T> {
+  var distanceFromTo: (T, T) -> Float
+  var compare: (T, T) -> Bool
+  
+  public init(compare areInIncreasingOrder: Optional<(T, T) -> Bool> = nil,
+              distanceFromTo: @escaping (T, T) -> Float) {
+    self.distanceFromTo = distanceFromTo
+    self.compare = areInIncreasingOrder ?? { distanceFromTo($0, $1) > 0 }
+  }
+  
+  public func distance(from: T, to: T) -> Float { return distanceFromTo(from, to) }
+}
+
+// Default adapters for numeric types.
+
+extension StrideableAdapter where T: Strideable, T.Stride: FloatConvertible {
+  public static var linear: StrideableAdapter {
+    return StrideableAdapter(
+      compare: <,
+      distanceFromTo: { Float($0.distance(to: $1)) }
+    )
+  }
+}
+extension StrideableAdapter where T: Strideable, T.Stride: FixedWidthInteger {
+  public static var linear: StrideableAdapter {
+    return StrideableAdapter(
+      compare: <,
+      distanceFromTo: { Float($0.distance(to: $1)) }
+    )
+  }
+}
+
+// Keypath numeric adapters.
+
+extension StrideableAdapter {
+  public static func keyPath<Element>(_ kp: KeyPath<T, Element>) -> StrideableAdapter
+    where Element: Strideable, Element.Stride: FloatConvertible {
+    return StrideableAdapter(
+      compare: { $0[keyPath: kp] < $1[keyPath: kp] },
+      distanceFromTo: { Float($0[keyPath: kp].distance(to: $1[keyPath: kp])) }
+    )
+  }
+  public static func keyPath<Element>(_ kp: KeyPath<T, Element>) -> StrideableAdapter
+    where Element: Strideable, Element.Stride: FixedWidthInteger {
+    return StrideableAdapter(
+      compare: { $0[keyPath: kp] < $1[keyPath: kp] },
+      distanceFromTo: { Float($0[keyPath: kp].distance(to: $1[keyPath: kp])) }
+    )
+  }
+}
+
+
+// Stacking prototype.
+
+
+public protocol BarGraphProtocol: Plot, HasGraphLayout {
+  associatedtype Parent: BarGraphProtocol
+  var parent: Parent? { get set }
+  
+  func _layoutData(size: Size, renderer: Renderer) -> (DrawingData, PlotMarkers?)
+}
+
+extension BarGraph: BarGraphProtocol {
+  public var parent: Self? {
+    get { return nil }
+    set { fatalError() }
+  }
+}
+
+extension BarGraphProtocol {
+  
+  public func stackedWith<S>(_ stackSeries: S) -> StackedBarGraph<Self, S> where S: Sequence {
+    return StackedBarGraph(base: self, values: stackSeries)
+  }
+}
+
+
+
+public struct StackedBarGraph<Base, SeriesType> where SeriesType: Sequence, Base: BarGraphProtocol {
+  public typealias Element = SeriesType.Element
+  
+  var base: Base
+  public var values: SeriesType
+}
+
+extension StackedBarGraph: Plot & HasGraphLayout {
+
+  public var layout: GraphLayout {
+    get { return base.layout }
+    set { base.layout = newValue }
+  }
+  
+  public struct DrawingData {
+    var baseData: Base.DrawingData!
+  }
+  
+  public func layoutData(size: Size, renderer: Renderer) -> (DrawingData, PlotMarkers?) {
+    return _layoutData(size: size, renderer: renderer)
+  }
+  
+  public func _layoutData(size: Size, renderer: Renderer) -> (DrawingData, PlotMarkers?) {
+    
+    // Calculate maximum/minimum/count, and pass it down to base.
+    
+    let baseResults = base._layoutData(size: size, renderer: renderer)
+    
+    return (DrawingData(baseData: baseResults.0), baseResults.1)
+  }
+  
+  public func drawData(_ data: DrawingData, size: Size, renderer: Renderer) {
+    base.drawData(data.baseData, size: size, renderer: renderer)
+  }
+}
+
+extension StackedBarGraph: BarGraphProtocol {
+  
+  public var parent: Base? {
+    get { return base }
+    set { base = newValue! }
+  }
 }
