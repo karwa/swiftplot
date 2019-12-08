@@ -165,15 +165,15 @@ public struct GraphLayout {
   
     /// Rounds the given markers to integer pixel locations, for sharper gridlines.
     private func roundMarkers(_ markers: inout PlotMarkers) {
-      for i in markers.xMarkers.indices {
-        markers.xMarkers[i].round(.up)
-      }
-      for i in markers.yMarkers.indices {
-        markers.yMarkers[i].round(.up)
-      }
-      for i in markers.y2Markers.indices {
-        markers.y2Markers[i].round(.up)
-      }
+//      for i in markers.xMarkers.indices {
+//        markers.xMarkers[i].round(.up)
+//      }
+//      for i in markers.yMarkers.indices {
+//        markers.yMarkers[i].round(.up)
+//      }
+//      for i in markers.y2Markers.indices {
+//        markers.y2Markers[i].round(.up)
+//      }
     }
     
     /// Lays out the chrome elements outside the plot's borders (axis titles, plot title, etc).

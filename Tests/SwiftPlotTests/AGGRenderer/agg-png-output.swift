@@ -16,6 +16,7 @@ extension AGGRendererTests {
       graph.color = .orange
       graph.hatchPattern = .cross
       graph.formatter = .array(x)
+      graph.label = "Plot 1"
       graph.plotTitle.title = "HATCHED BAR CHART"
       graph.plotLabel.xLabel = "X-AXIS"
       graph.plotLabel.yLabel = "Y-AXIS"
@@ -24,7 +25,7 @@ extension AGGRendererTests {
     let renderer = AGGRenderer()
     barGraph.drawGraph(renderer: renderer)
     let outputBase64 = renderer.base64Png()
-    XCTAssertEqual(outputBase64.count, 47104)
+    XCTAssertEqual(outputBase64.count, 18296)
     
     // First, sanity check: ensure *we* can decode the string.
     guard let _ = Data(base64Encoded: outputBase64, options: .ignoreUnknownCharacters) else {
