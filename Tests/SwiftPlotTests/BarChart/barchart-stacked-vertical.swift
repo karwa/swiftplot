@@ -18,11 +18,19 @@ extension BarchartTests {
     let y:[Float] = [320,-100,420,500]
     let y1:[Float] = [100,100,220,245]
 
-    var barGraph = BarGraph<String,Float>(enableGrid: true)
-    barGraph.addSeries(x, y, label: "Plot 1", color: .orange)
-    barGraph.addStackSeries(y1, label: "Plot 2", color: .blue)
-    barGraph.plotTitle = PlotTitle("BAR CHART")
-    barGraph.plotLabel = PlotLabel(xLabel: "X-AXIS", yLabel: "Y-AXIS")
+    let barGraph = y.plots.barChart() { graph in
+      graph.color = .orange
+      graph.graphOrientation = .vertical
+      
+      graph.label = "Plot 1"
+      graph.formatter = .array(x)
+      graph.plotTitle.title = "BAR CHART"
+      graph.plotLabel.xLabel = "X-AXIS"
+      graph.plotLabel.yLabel = "Y-AXIS"
+    }.stackedWith(y1) { stack in
+      stack.segmentColor = .blue
+      stack.segmentLabel = "Plot 2"
+    }
     
     try renderAndVerify(barGraph, fileName: fileName)
   }
