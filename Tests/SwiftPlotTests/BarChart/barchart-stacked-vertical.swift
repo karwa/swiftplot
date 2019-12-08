@@ -20,7 +20,7 @@ extension BarchartTests {
 
     let barGraph = y.plots.barChart() { graph in
       graph.color = .orange
-      graph.graphOrientation = .horizontal
+      graph.graphOrientation = .vertical
       
       graph.label = "Plot 1"
       graph.formatter = .array(x)

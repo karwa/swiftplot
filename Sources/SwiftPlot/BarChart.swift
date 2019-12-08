@@ -28,48 +28,6 @@ public struct BarGraph<SeriesType> where SeriesType: Sequence {
   }
 }
 
-extension SequencePlots {
-  public func barChart(
-    adapter: StrideableAdapter<Base.Element>,
-    origin: Base.Element,
-    style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
-    var graph = BarGraph(base, adapter: adapter, origin: origin)
-    style(&graph)
-    return graph
-  }
-}
-
-// Default adapter for Stride: FloatConvertible.
-extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FloatConvertible {
-  public func barChart(
-    origin: Base.Element,
-    style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
-    return self.barChart(adapter: .linear, origin: origin, style: style)
-  }
-}
-// Default adapter and origin for Stride: FloatConvertible.
-extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FloatConvertible,
-Base.Element: ExpressibleByIntegerLiteral {
-  public func barChart(style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
-    return self.barChart(adapter: .linear, origin: 0, style: style)
-  }
-}
-// Default adapter for Stride: FixedWidthInteger.
-extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FixedWidthInteger {
-  public func barChart(
-    origin: Base.Element,
-    style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
-    return self.barChart(adapter: .linear, origin: origin, style: style)
-  }
-}
-// Default adapter and origin for Stride: FixedWidthInteger
-extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FixedWidthInteger,
-Base.Element: ExpressibleByIntegerLiteral {
-  public func barChart(style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
-    return self.barChart(adapter: .linear, origin: 0, style: style)
-  }
-}
-
 // Layout properties.
 
 extension BarGraph {
@@ -82,7 +40,7 @@ extension BarGraph {
 
 // Layout and drawing of data.
 
-extension BarGraph: HasGraphLayout & Plot {
+extension BarGraph: _BarGraphProtocol {
     
   public func _appendLegendLabel(to: inout [(String, LegendIcon)]) {
     to.append((label, .square(color)))
@@ -391,10 +349,11 @@ public struct TextFormatter<T> {
   public static func custom(_ formatter: @escaping (T, Int)->String) -> TextFormatter<T> {
     return TextFormatter(custom: formatter)
   }
-  public static func array(_ array: [String]) -> TextFormatter<T> {
-    return TextFormatter { [array] _, idx in
-      guard array.indices.contains(idx) else { return "" }
-      return array[idx]
+  public static func array<C>(_ array: C) -> TextFormatter<T>
+    where C: RandomAccessCollection, C.Element == String {
+    return TextFormatter { [array] _, offset in
+      guard array.count > offset else { return "" }
+      return array[array.index(array.startIndex, offsetBy: offset)]
     }
   }
 }
@@ -474,9 +433,6 @@ public struct BarGraphLayoutData {
   }
 }
 
-// Stacking prototype.
-
-
 public struct BarLayoutData {
   var layout: BarGraphLayoutData
   var axisLocation: Float
@@ -484,12 +440,11 @@ public struct BarLayoutData {
   var negativeValueHeight: Float
 }
 
+/// This protocol exists to support BarGraph.
+/// Do not try to conform to this protocol.
 public protocol _BarGraphProtocol: Plot, HasGraphLayout {
-  associatedtype Parent: _BarGraphProtocol
   
-  /// The stack or series below this element of the `BarGraph`.
-  /// The root `BarGraph` is its own parent, so this chain never terminates.
-  var parent: Parent { get set }
+// Chained HasGraphLayout:
   
   // Appends legend information for this segment to the given array.
   func _appendLegendLabel(to: inout [(String, LegendIcon)])
@@ -503,20 +458,30 @@ public protocol _BarGraphProtocol: Plot, HasGraphLayout {
   func _drawData(_ data: DrawingData, size: Size, renderer: Renderer,
                  drawStack: (inout BarLayoutData)->Bool)
  
+// Chain traversal:
+  
+  associatedtype _Parent: _BarGraphProtocol
+  
+  /// The stack or series below this element of the `BarGraph`.
+  /// The root `BarGraph` is its own parent, so this chain never terminates.
+  var parent: _Parent { get set }
+  
   // A magic associated type which gets funnelled down the chain of generic wrappers,
   // finally terminating at the root `BarGraph`
   associatedtype _RootBarGraphSeriesType: Sequence
   
   /// The `BarGraph`.
   var barGraph: BarGraph<_RootBarGraphSeriesType> { get set }
+
+// Segment properties:
   
   associatedtype Element
   var originElement: Element { get set }
   var adapter: StrideableAdapter<Element> { get set }
 }
 
-extension BarGraph: _BarGraphProtocol {
-  public typealias Parent = Self
+extension BarGraph {
+  public typealias _Parent = Self
   public typealias _RootBarGraphSeriesType = SeriesType
   
   public var parent: Self {
@@ -714,5 +679,47 @@ extension StackedBarGraph: _BarGraphProtocol {
     get { return base.barGraph }
     _modify { yield &base.barGraph }
     set { base.barGraph = newValue }
+  }
+}
+
+extension SequencePlots {
+  public func barChart(
+    adapter: StrideableAdapter<Base.Element>,
+    origin: Base.Element,
+    style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
+    var graph = BarGraph(base, adapter: adapter, origin: origin)
+    style(&graph)
+    return graph
+  }
+}
+
+// Default adapter for Stride: FloatConvertible.
+extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FloatConvertible {
+  public func barChart(
+    origin: Base.Element,
+    style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
+    return self.barChart(adapter: .linear, origin: origin, style: style)
+  }
+}
+// Default adapter and origin for Stride: FloatConvertible.
+extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FloatConvertible,
+Base.Element: ExpressibleByIntegerLiteral {
+  public func barChart(style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
+    return self.barChart(adapter: .linear, origin: 0, style: style)
+  }
+}
+// Default adapter for Stride: FixedWidthInteger.
+extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FixedWidthInteger {
+  public func barChart(
+    origin: Base.Element,
+    style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
+    return self.barChart(adapter: .linear, origin: origin, style: style)
+  }
+}
+// Default adapter and origin for Stride: FixedWidthInteger
+extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FixedWidthInteger,
+Base.Element: ExpressibleByIntegerLiteral {
+  public func barChart(style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
+    return self.barChart(adapter: .linear, origin: 0, style: style)
   }
 }
