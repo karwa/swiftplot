@@ -5,44 +5,71 @@ fileprivate let MAX_DIV: Float = 50
 // class defining a barGraph and all it's logic
 public struct BarGraph<SeriesType> where SeriesType: Sequence {
   public typealias Element = SeriesType.Element
-
-    public var layout = GraphLayout()
-    // Data.
-    var seriesData: SeriesType
-    var adapter: StrideableAdapter<Element>
   
-    var barLabels = [String]()
-    var series_info = Series<String,Int>()
-    // BarGraph layout properties.
-    public var graphOrientation = GraphOrientation.vertical
-    public var minimumSeparation = 20
+  public var layout = GraphLayout()
+  // Data.
+  public var values: SeriesType
+  // BarGraph layout properties.
+  public var adapter: StrideableAdapter<Element>
+  public var formatter: TextFormatter<Element> = .default
+  public var originElement: Element
   
-  var originElement: Element
+  public var graphOrientation = GraphOrientation.vertical
+  public var minimumSeparation = 20
+  
+  public var label = ""
+  public var color = Color.orange
+  public var hatchPattern = BarGraphSeriesOptions.Hatching.none
   
   public init(_ data: SeriesType, adapter: StrideableAdapter<Element>, origin: Element) {
-    self.seriesData = data
+    self.values = data
     self.adapter = adapter
     self.originElement = origin
   }
 }
 
 extension SequencePlots {
-  public func barChart(adapter: StrideableAdapter<Base.Element>, origin: Base.Element) -> BarGraph<Base> {
-    return BarGraph(base, adapter: adapter, origin: origin)
+  public func barChart(
+    adapter: StrideableAdapter<Base.Element>,
+    origin: Base.Element,
+    style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
+    var graph = BarGraph(base, adapter: adapter, origin: origin)
+    style(&graph)
+    return graph
   }
 }
 
+// Default adapter for Stride: FloatConvertible.
 extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FloatConvertible {
-  public func barChart(origin: Base.Element) -> BarGraph<Base> {
-    return BarGraph(base, adapter: .linear, origin: origin)
+  public func barChart(
+    origin: Base.Element,
+    style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
+    return self.barChart(adapter: .linear, origin: origin, style: style)
+  }
+}
+// Default adapter and origin for Stride: FloatConvertible.
+extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FloatConvertible,
+Base.Element: ExpressibleByIntegerLiteral {
+  public func barChart(style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
+    return self.barChart(adapter: .linear, origin: 0, style: style)
+  }
+}
+// Default adapter for Stride: FixedWidthInteger.
+extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FixedWidthInteger {
+  public func barChart(
+    origin: Base.Element,
+    style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
+    return self.barChart(adapter: .linear, origin: origin, style: style)
+  }
+}
+// Default adapter and origin for Stride: FixedWidthInteger
+extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FixedWidthInteger,
+Base.Element: ExpressibleByIntegerLiteral {
+  public func barChart(style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
+    return self.barChart(adapter: .linear, origin: 0, style: style)
   }
 }
 
-extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FixedWidthInteger {
-  public func barChart(origin: Base.Element) -> BarGraph<Base> {
-    return BarGraph(base, adapter: .linear, origin: origin)
-  }
-}
 
 extension BarGraph {
   
@@ -57,18 +84,17 @@ extension BarGraph {
 extension BarGraph {
 
     public mutating func addSeries(_ s: SeriesType) {
-        seriesData = s
+        values = s
     }
     public mutating func addSeries(values: SeriesType,
                           label: String,
                           color: Color = Color.lightBlue,
                           hatchPattern: BarGraphSeriesOptions.Hatching = .none,
                           graphOrientation: GraphOrientation = .vertical){
-      seriesData = values
-      series_info = Series(values: [],
-                           label: label,
-                           color: color,
-                           hatchPattern: hatchPattern)
+      self.values = values
+      self.label = label
+      self.color = color
+      self.hatchPattern = hatchPattern
       self.graphOrientation = graphOrientation
     }
 //    public mutating func addSeries(_ x: [String],
@@ -97,14 +123,11 @@ extension BarGraph {
 
 extension BarGraph: HasGraphLayout & Plot {
     
-    public var legendLabels: [(String, LegendIcon)] {
-//        var legendSeries = stackSeries_info.map { ($0.label, LegendIcon.square($0.color)) }
-//        legendSeries.insert((series_info.label, .square(series_info.color)), at: 0)
-//        return legendSeries
-      []
-    }
-    
-    public typealias DrawingData = BarGraphLayoutData
+  public func _appendLegendLabel(to: inout [(String, LegendIcon)]) {
+    to.append((label, .square(color)))
+  }
+  
+  public typealias DrawingData = BarGraphLayoutData
   
     // functions implementing plotting logic
   public func _layoutData(size: Size, renderer: Renderer, getStackHeight: ()->(Float, Float)?) -> (DrawingData, PlotMarkers?) {
@@ -117,7 +140,7 @@ extension BarGraph: HasGraphLayout & Plot {
       var maxBarHeight: Float = 0
       var minBarHeight: Float = 0
       var count = 0
-      for element in seriesData {
+      for element in values {
         count += 1
         var barHeight: (Float, Float) = (0, 0)
         let seriesHeight = adapter.distance(from: originElement, to: element)
@@ -232,9 +255,9 @@ extension BarGraph: HasGraphLayout & Plot {
           // TODO: Do not show all x-markers if there are too many bars.
           // TODO: Allow setting x-markers.
           var i = 0
-          for value in seriesData {
+          for value in values {
             markers.xMarkers.append(results.axisMarkerLocationForBar(i))
-            markers.xMarkersText.append(String(describing: value))
+            markers.xMarkersText.append(formatter.callAsFunction(value, offset: i))
             i += 1
           }
           for _ in i..<count {
@@ -324,9 +347,9 @@ extension BarGraph: HasGraphLayout & Plot {
         // TODO: Do not show all y-markers if there are too many bars.
         // TODO: Allow setting y-markers.
         var i = 0
-        for value in seriesData {
+        for value in values {
           markers.yMarkers.append(results.axisMarkerLocationForBar(i))
-          markers.yMarkersText.append(String(describing: value))
+          markers.yMarkersText.append(formatter.callAsFunction(value, offset: i))
           i += 1
         }
         for _ in i..<count {
@@ -343,14 +366,12 @@ extension BarGraph: HasGraphLayout & Plot {
     switch graphOrientation {
     case .vertical:
       var barIndex = 0
-      for seriesValue in seriesData {
+      for seriesValue in values {
         // Draw the bar from the main series.
         let seriesHeight = (adapter.distance(from: originElement, to: seriesValue) * data.scale).rounded(.up)
         let rect = Rect(origin: Point(data.axisLocationForBar(barIndex), data.origin.y),
                         size: Size(width: Float(data.barSize), height: seriesHeight))
-        renderer.drawSolidRect(rect,
-                               fillColor: series_info.color,
-                               hatchPattern: series_info.barGraphSeriesOptions.hatchPattern)
+        renderer.drawSolidRect(rect, fillColor: color, hatchPattern: hatchPattern)
         // Call up the stack chain to draw their segments.
         var barLayoutData = BarLayoutData(layout: data, axisLocation: rect.minX,
                                           positiveValueHeight: rect.height > 0 ? rect.height : 0,
@@ -369,14 +390,12 @@ extension BarGraph: HasGraphLayout & Plot {
           
     case .horizontal:
       var barIndex = 0
-      for seriesValue in seriesData {
+      for seriesValue in values {
         // Draw the bar from the main series.
         let seriesWidth = (adapter.distance(from: originElement, to: seriesValue) * data.scale).rounded(.up)
         let rect = Rect(origin: Point(data.origin.x, data.axisLocationForBar(barIndex)),
                         size: Size(width: seriesWidth, height: Float(data.barSize)))
-        renderer.drawSolidRect(rect,
-                               fillColor: series_info.color,
-                               hatchPattern: series_info.barGraphSeriesOptions.hatchPattern)
+        renderer.drawSolidRect(rect, fillColor: color, hatchPattern: hatchPattern)
         // Call up the stack chain to draw their segments.
         var barLayoutData = BarLayoutData(layout: data, axisLocation: rect.minY,
                                           positiveValueHeight: rect.width > 0 ? rect.width : 0,
@@ -392,6 +411,29 @@ extension BarGraph: HasGraphLayout & Plot {
         barLayoutData = BarLayoutData(layout: data, axisLocation: data.axisLocationForBar(barIndex),
                                       positiveValueHeight: 0, negativeValueHeight: 0)
       }
+    }
+  }
+}
+
+public struct TextFormatter<T> {
+  private let _format: (T, Int) -> String
+  private init(custom: @escaping (T, Int)->String) {
+    self._format = custom
+  }
+  
+  public func callAsFunction(_ val: T, offset: Int) -> String {
+    _format(val, offset)
+  }
+  public static var `default`: TextFormatter<T> {
+    return TextFormatter { val, idx in String(describing: val) }
+  }
+  public static func custom(_ formatter: @escaping (T, Int)->String) -> TextFormatter<T> {
+    return TextFormatter(custom: formatter)
+  }
+  public static func array(_ array: [String]) -> TextFormatter<T> {
+    return TextFormatter { [array] _, idx in
+      guard array.indices.contains(idx) else { return "" }
+      return array[idx]
     }
   }
 }
@@ -488,6 +530,9 @@ public protocol _BarGraphProtocol: Plot, HasGraphLayout {
   /// The root `BarGraph` is its own parent, so this chain never terminates.
   var parent: Parent { get set }
   
+  // Appends legend information for this segment to the given array.
+  func _appendLegendLabel(to: inout [(String, LegendIcon)])
+  
   // Lays out the bar from this segment down.
   // `getStackHeight` returns a tuple of (positiveSegmentHeight, negativeSegmentHeight).
   func _layoutData(size: Size, renderer: Renderer, getStackHeight: ()->(Float, Float)?) -> (DrawingData, PlotMarkers?)
@@ -503,6 +548,10 @@ public protocol _BarGraphProtocol: Plot, HasGraphLayout {
   
   /// The `BarGraph`.
   var barGraph: BarGraph<_RootBarGraphSeriesType> { get set }
+  
+  associatedtype Element
+  var originElement: Element { get set }
+  var adapter: StrideableAdapter<Element> { get set }
 }
 
 extension BarGraph: _BarGraphProtocol {
@@ -521,7 +570,16 @@ extension BarGraph: _BarGraphProtocol {
   }
 }
 
+// Implement HasGraphLayout requirements in terms of our custom versions.
+
 extension _BarGraphProtocol {
+  
+  public var legendLabels: [(String, LegendIcon)] {
+    var labels = [(String, LegendIcon)]()
+    _appendLegendLabel(to: &labels)
+    labels.reverse()
+    return labels
+  }
   
   public func layoutData(size: Size, renderer: Renderer) -> (DrawingData, PlotMarkers?) {
     // This gets called when we are at the top of the stack.
@@ -534,9 +592,55 @@ extension _BarGraphProtocol {
     // Delegate to our own chain of layout functions and terminate the closure-chain.
     _drawData(data, size: size, renderer: renderer, drawStack: { _ in false })
   }
+}
+
+extension _BarGraphProtocol {
   
-  public func stackedWith<S>(_ stackSeries: S, adapter: StrideableAdapter<S.Element>, origin: S.Element) -> StackedBarGraph<Self, S> where S: Sequence {
-    return StackedBarGraph(base: self, values: stackSeries, adapter: adapter, origin: origin)
+  public __consuming func style(_ styleBlock: (inout Self)->Void) -> Self {
+    var edited = self
+    styleBlock(&edited)
+    return edited
+  }
+  
+  // Basic initializer.
+  
+  public func stackedWith<S>(
+    _ stackSeries: S,
+    adapter: StrideableAdapter<S.Element>,
+    origin: S.Element,
+    style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S> where S: Sequence {
+    var stack = StackedBarGraph(base: self, values: stackSeries, adapter: adapter, originElement: origin)
+    style(&stack)
+    return stack
+  }
+
+  // Default adapter and origin for matching element types.
+  
+  public func stackedWith<S>(
+    _ stackSeries: S,
+    style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S>
+    where S: Sequence, S.Element == Element {
+      return stackedWith(stackSeries, adapter: adapter, origin: originElement, style: style)
+  }
+  
+  // Default adapter for Stride: FloatConvertible.
+  
+  public func stackedWith<S>(
+    _ stackSeries: S,
+    origin: S.Element,
+    style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S>
+    where S: Sequence, S.Element: Strideable, S.Element.Stride: FloatConvertible {
+      return stackedWith(stackSeries, adapter: .linear, origin: origin, style: style)
+  }
+  
+  // Default adapter for Stride: FixedWidthInteger.
+  
+  public func stackedWith<S>(
+    _ stackSeries: S,
+    origin: S.Element,
+    style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S>
+    where S: Sequence, S.Element: Strideable, S.Element.Stride: FixedWidthInteger {
+      return stackedWith(stackSeries, adapter: .linear, origin: origin, style: style)
   }
 }
 
@@ -544,12 +648,14 @@ extension _BarGraphProtocol {
 
 public struct StackedBarGraph<Base, SeriesType> where SeriesType: Sequence, Base: _BarGraphProtocol {
   public typealias Element = SeriesType.Element
-  
   var base: Base
   public var values: SeriesType
-  var adapter: StrideableAdapter<Element>
-  var origin: Element
-  public var segmentColor: Color = .orange
+  public var adapter: StrideableAdapter<Element>
+  public var originElement: Element
+  
+  public var segmentLabel = ""
+  public var segmentColor = Color.blue
+  public var segmentHatchPattern = BarGraphSeriesOptions.Hatching.none
 }
 
 extension StackedBarGraph: Plot & HasGraphLayout {
@@ -563,6 +669,12 @@ extension StackedBarGraph: Plot & HasGraphLayout {
     var baseData: Base.DrawingData!
   }
   
+  public func _appendLegendLabel(to: inout [(String, LegendIcon)]) {
+    to.append((segmentLabel, .square(segmentColor)))
+    base._appendLegendLabel(to: &to)
+  }
+
+  
   public func _layoutData(size: Size, renderer: Renderer, getStackHeight: ()->(Float, Float)?) -> (DrawingData, PlotMarkers?) {
     
     // Calculate maximum/minimum/count, and pass it down to base.
@@ -571,7 +683,7 @@ extension StackedBarGraph: Plot & HasGraphLayout {
     let baseResults = base._layoutData(size: size, renderer: renderer, getStackHeight: {
       let base = getStackHeight()
       if let nextValue = it.next() {
-        let segmentHeight = adapter.distance(from: origin, to: nextValue)
+        let segmentHeight = adapter.distance(from: originElement, to: nextValue)
         if segmentHeight > 0 {
           return ((base?.0 ?? 0) + segmentHeight, base?.1 ?? 0)
         } else {
@@ -591,7 +703,7 @@ extension StackedBarGraph: Plot & HasGraphLayout {
       var shouldContinue: Bool
       // Draw our stack segment.
       if let nextValue = it.next() {
-        let segmentHeight = adapter.distance(from: origin, to: nextValue) * layoutInfo.layout.scale
+        let segmentHeight = adapter.distance(from: originElement, to: nextValue) * layoutInfo.layout.scale
         var segmentRect: Rect
         switch layoutInfo.layout.orientation {
         case .vertical:
@@ -616,7 +728,7 @@ extension StackedBarGraph: Plot & HasGraphLayout {
             layoutInfo.positiveValueHeight += segmentHeight
           }
         }
-        renderer.drawSolidRect(segmentRect.normalized, fillColor: segmentColor, hatchPattern: .none)
+        renderer.drawSolidRect(segmentRect.normalized, fillColor: segmentColor, hatchPattern: segmentHatchPattern)
         shouldContinue = true
       } else {
         shouldContinue = false

@@ -23,6 +23,8 @@ extension BarchartTests {
       .barChart(origin: 0)
       .stackedWith(y1, adapter: .linear, origin: 0)
     
+    barGraph.barGraph.formatter = .array(x)
+    
     barGraph.barGraph.graphOrientation = .horizontal
     barGraph.plotTitle = PlotTitle("BAR CHART")
     barGraph.plotLabel = PlotLabel(xLabel: "X-AXIS", yLabel: "Y-AXIS")

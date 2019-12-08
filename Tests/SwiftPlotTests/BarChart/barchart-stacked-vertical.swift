@@ -21,6 +21,11 @@ extension BarchartTests {
     var barGraph = y.plots
     .barChart(origin: 0)
     .stackedWith(y1, adapter: .linear, origin: 0)
+    
+    barGraph.barGraph.color = .orange
+    barGraph.segmentColor = .blue
+    barGraph.barGraph.formatter = .array(x)
+    
 //    barGraph.addSeries(x, y, label: "Plot 1", color: .orange)
     barGraph.plotTitle = PlotTitle("BAR CHART")
     barGraph.plotLabel = PlotLabel(xLabel: "X-AXIS", yLabel: "Y-AXIS")
