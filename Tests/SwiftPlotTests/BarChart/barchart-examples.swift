@@ -18,7 +18,7 @@ extension BarchartTests {
     let y:[Float] = [320,100,420,500]
     let barGraph = y.plots.barChart() { graph in
       graph.color = .orange
-      graph.formatter = .array(x)
+      graph.categoryLabels = .array(x)
       
       graph.label = "Plot 1"
       graph.plotTitle.title = "BAR CHART"
@@ -54,7 +54,7 @@ extension BarchartTests {
       graph.graphOrientation = .horizontal
       
       graph.label = "Plot 1"
-      graph.formatter = .array(x)
+      graph.categoryLabels = .array(x)
       graph.plotTitle.title = "BAR CHART"
       graph.plotLabel.xLabel = "X-AXIS"
       graph.plotLabel.yLabel = "Y-AXIS"
@@ -94,7 +94,7 @@ extension BarchartTests {
       graph.hatchPattern = .forwardSlash
       
       graph.label = "Plot 1"
-      graph.formatter = .array(x)
+      graph.categoryLabels = .array(x)
       graph.plotTitle.title = "HATCHED BAR CHART"
       graph.plotLabel.xLabel = "X-AXIS"
       graph.plotLabel.yLabel = "Y-AXIS"
@@ -128,7 +128,7 @@ extension BarchartTests {
       graph.hatchPattern = .backwardSlash
       
       graph.label = "Plot 1"
-      graph.formatter = .array(x)
+      graph.categoryLabels = .array(x)
       graph.plotTitle.title = "HATCHED BAR CHART"
       graph.plotLabel.xLabel = "X-AXIS"
       graph.plotLabel.yLabel = "Y-AXIS"
@@ -162,7 +162,7 @@ extension BarchartTests {
       graph.hatchPattern = .vertical
       
       graph.label = "Plot 1"
-      graph.formatter = .array(x)
+      graph.categoryLabels = .array(x)
       graph.plotTitle.title = "HATCHED BAR CHART"
       graph.plotLabel.xLabel = "X-AXIS"
       graph.plotLabel.yLabel = "Y-AXIS"
@@ -196,7 +196,7 @@ extension BarchartTests {
       graph.hatchPattern = .horizontal
       
       graph.label = "Plot 1"
-      graph.formatter = .array(x)
+      graph.categoryLabels = .array(x)
       graph.plotTitle.title = "HATCHED BAR CHART"
       graph.plotLabel.xLabel = "X-AXIS"
       graph.plotLabel.yLabel = "Y-AXIS"
@@ -230,7 +230,7 @@ extension BarchartTests {
       graph.hatchPattern = .grid
       
       graph.label = "Plot 1"
-      graph.formatter = .array(x)
+      graph.categoryLabels = .array(x)
       graph.plotTitle.title = "HATCHED BAR CHART"
       graph.plotLabel.xLabel = "X-AXIS"
       graph.plotLabel.yLabel = "Y-AXIS"
@@ -267,7 +267,7 @@ extension BarchartTests {
       graph.hatchPattern = .cross
       
       graph.label = "Plot 1"
-      graph.formatter = .array(x)
+      graph.categoryLabels = .array(x)
       graph.plotTitle.title = "HATCHED BAR CHART"
       graph.plotLabel.xLabel = "X-AXIS"
       graph.plotLabel.yLabel = "Y-AXIS"
@@ -301,7 +301,7 @@ extension BarchartTests {
       graph.hatchPattern = .hollowCircle
       
       graph.label = "Plot 1"
-      graph.formatter = .array(x)
+      graph.categoryLabels = .array(x)
       graph.plotTitle.title = "HATCHED BAR CHART"
       graph.plotLabel.xLabel = "X-AXIS"
       graph.plotLabel.yLabel = "Y-AXIS"
@@ -335,7 +335,7 @@ extension BarchartTests {
       graph.hatchPattern = .filledCircle
       
       graph.label = "Plot 1"
-      graph.formatter = .array(x)
+      graph.categoryLabels = .array(x)
       graph.plotTitle.title = "HATCHED BAR CHART"
       graph.plotLabel.xLabel = "X-AXIS"
       graph.plotLabel.yLabel = "Y-AXIS"
@@ -377,13 +377,13 @@ extension BarchartTests {
       graph.graphOrientation = .vertical
       
       graph.label = "Plot 1"
-      graph.formatter = .array(x)
+      graph.categoryLabels = .array(x)
       graph.plotTitle.title = "BAR CHART"
       graph.plotLabel.xLabel = "X-AXIS"
       graph.plotLabel.yLabel = "Y-AXIS"
     }.stackedWith(y1) { stack in
-      stack.segmentColor = .blue
-      stack.segmentLabel = "Plot 2"
+      stack.color = .blue
+      stack.label = "Plot 2"
     }
     
     let fileName = "_18_bar_chart_vertical_stacked"
@@ -416,13 +416,13 @@ extension BarchartTests {
       graph.graphOrientation = .horizontal
       
       graph.label = "Plot 1"
-      graph.formatter = .array(x)
+      graph.categoryLabels = .array(x)
       graph.plotTitle.title = "BAR CHART"
       graph.plotLabel.xLabel = "X-AXIS"
       graph.plotLabel.yLabel = "Y-AXIS"
     }.stackedWith(y1) { stack in
-      stack.segmentColor = .blue
-      stack.segmentLabel = "Plot 2"
+      stack.color = .blue
+      stack.label = "Plot 2"
     }
     
     let fileName = "_19_bar_chart_horizontal_stacked"
