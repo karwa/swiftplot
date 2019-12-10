@@ -10,9 +10,8 @@ public struct BarGraph<SeriesType> where SeriesType: Sequence {
   // Data.
   public var values: SeriesType
   // BarGraph layout properties.
-  public var adapter: StrideableAdapter<Element>
+  public var adapter: BarGraphAdapter<Element>
   public var formatter: TextFormatter<Element> = .default
-  public var originElement: Element
   
   public var graphOrientation = GraphOrientation.vertical
   public var minimumSeparation = 20
@@ -21,10 +20,9 @@ public struct BarGraph<SeriesType> where SeriesType: Sequence {
   public var color = Color.orange
   public var hatchPattern = BarGraphSeriesOptions.Hatching.none
   
-  public init(_ data: SeriesType, adapter: StrideableAdapter<Element>, origin: Element) {
+  public init(_ data: SeriesType, adapter: BarGraphAdapter<Element>) {
     self.values = data
     self.adapter = adapter
-    self.originElement = origin
   }
 }
 
@@ -62,7 +60,7 @@ extension BarGraph: _BarGraphProtocol {
       for element in values {
         count += 1
         var barHeight: (Float, Float) = (0, 0)
-        let seriesHeight = adapter.distance(from: originElement, to: element)
+        let seriesHeight = adapter.heightAboveOrigin(element)
         if seriesHeight > 0 {
           barHeight.0 = seriesHeight
         } else {
@@ -287,7 +285,7 @@ extension BarGraph: _BarGraphProtocol {
       var barIndex = 0
       for seriesValue in values {
         // Draw the bar from the main series.
-        let seriesHeight = (adapter.distance(from: originElement, to: seriesValue) * data.scale).rounded(.up)
+        let seriesHeight = (adapter.heightAboveOrigin(seriesValue) * data.scale).rounded(.up)
         let rect = Rect(origin: Point(data.axisLocationForBar(barIndex), data.origin.y),
                         size: Size(width: Float(data.barSize), height: seriesHeight))
         renderer.drawSolidRect(rect, fillColor: color, hatchPattern: hatchPattern)
@@ -311,7 +309,7 @@ extension BarGraph: _BarGraphProtocol {
       var barIndex = 0
       for seriesValue in values {
         // Draw the bar from the main series.
-        let seriesWidth = (adapter.distance(from: originElement, to: seriesValue) * data.scale).rounded(.up)
+        let seriesWidth = (adapter.heightAboveOrigin(seriesValue) * data.scale).rounded(.up)
         let rect = Rect(origin: Point(data.origin.x, data.axisLocationForBar(barIndex)),
                         size: Size(width: seriesWidth, height: Float(data.barSize)))
         renderer.drawSolidRect(rect, fillColor: color, hatchPattern: hatchPattern)
@@ -361,54 +359,53 @@ public struct TextFormatter<T> {
   }
 }
 
-public struct StrideableAdapter<T> {
-  var distanceFromTo: (T, T) -> Float
-  var compare: (T, T) -> Bool
+public struct BarGraphAdapter<T> {
+  var heightAboveOrigin: (T) -> Float
   
-  public init(compare areInIncreasingOrder: Optional<(T, T) -> Bool> = nil,
-              distanceFromTo: @escaping (T, T) -> Float) {
-    self.distanceFromTo = distanceFromTo
-    self.compare = areInIncreasingOrder ?? { distanceFromTo($0, $1) > 0 }
+  public init(heightAboveOrigin: @escaping (T) -> Float) {
+    self.heightAboveOrigin = heightAboveOrigin
   }
-  
-  public func distance(from: T, to: T) -> Float { return distanceFromTo(from, to) }
 }
 
 // Default adapters for numeric types.
 
-extension StrideableAdapter where T: Strideable, T.Stride: FloatConvertible {
-  public static var linear: StrideableAdapter {
-    return StrideableAdapter(
-      compare: <,
-      distanceFromTo: { Float($0.distance(to: $1)) }
-    )
+extension BarGraphAdapter where T: BinaryFloatingPoint {
+  public static var linear: BarGraphAdapter {
+    return BarGraphAdapter(heightAboveOrigin: { Float($0) })
   }
 }
-extension StrideableAdapter where T: Strideable, T.Stride: FixedWidthInteger {
-  public static var linear: StrideableAdapter {
-    return StrideableAdapter(
-      compare: <,
-      distanceFromTo: { Float($0.distance(to: $1)) }
-    )
+extension BarGraphAdapter where T: FixedWidthInteger {
+  public static var linear: BarGraphAdapter {
+    return BarGraphAdapter(heightAboveOrigin: { Float($0) })
   }
 }
 
-// Keypath numeric adapters.
+// Keypath adapters.
 
-extension StrideableAdapter {
-  public static func keyPath<Element>(_ kp: KeyPath<T, Element>) -> StrideableAdapter
-    where Element: Strideable, Element.Stride: FloatConvertible {
-    return StrideableAdapter(
-      compare: { $0[keyPath: kp] < $1[keyPath: kp] },
-      distanceFromTo: { Float($0[keyPath: kp].distance(to: $1[keyPath: kp])) }
-    )
+extension BarGraphAdapter {
+  
+  // Keypath to numeric type.
+  
+  public static func keyPath<Element>(_ kp: KeyPath<T, Element>, origin: Element = 0) -> BarGraphAdapter
+    where Element: BinaryFloatingPoint {
+      return BarGraphAdapter(heightAboveOrigin: { Float($0[keyPath: kp] - origin) })
   }
-  public static func keyPath<Element>(_ kp: KeyPath<T, Element>) -> StrideableAdapter
-    where Element: Strideable, Element.Stride: FixedWidthInteger {
-    return StrideableAdapter(
-      compare: { $0[keyPath: kp] < $1[keyPath: kp] },
-      distanceFromTo: { Float($0[keyPath: kp].distance(to: $1[keyPath: kp])) }
-    )
+  
+  public static func keyPath<Element>(_ kp: KeyPath<T, Element>, origin: Element = 0) -> BarGraphAdapter
+    where Element: FixedWidthInteger {
+    return BarGraphAdapter(heightAboveOrigin: { Float($0[keyPath: kp] - origin) })
+  }
+  
+  // Keypath with origin expressed as T.
+
+  public static func keyPath<Element>(_ kp: KeyPath<T, Element>, origin: T) -> BarGraphAdapter
+    where Element: BinaryFloatingPoint {
+      return .keyPath(kp, origin: origin[keyPath: kp])
+  }
+  
+  public static func keyPath<Element>(_ kp: KeyPath<T, Element>, origin: T) -> BarGraphAdapter
+    where Element: FixedWidthInteger {
+      return .keyPath(kp, origin: origin[keyPath: kp])
   }
 }
 
@@ -479,8 +476,7 @@ public protocol _BarGraphProtocol: Plot, HasGraphLayout {
 // Segment properties:
   
   associatedtype Element
-  var originElement: Element { get set }
-  var adapter: StrideableAdapter<Element> { get set }
+  var adapter: BarGraphAdapter<Element> { get set }
 }
 
 extension BarGraph {
@@ -535,41 +531,29 @@ extension _BarGraphProtocol {
   
   public func stackedWith<S>(
     _ stackSeries: S,
-    adapter: StrideableAdapter<S.Element>,
-    origin: S.Element,
+    adapter: BarGraphAdapter<S.Element>,
     style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S> where S: Sequence {
-    var stack = StackedBarGraph(base: self, values: stackSeries, adapter: adapter, originElement: origin)
+    var stack = StackedBarGraph(base: self, values: stackSeries, adapter: adapter)
     style(&stack)
     return stack
-  }
-
-  // Default adapter and origin for matching element types.
-  
-  public func stackedWith<S>(
-    _ stackSeries: S,
-    style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S>
-    where S: Sequence, S.Element == Element {
-      return stackedWith(stackSeries, adapter: adapter, origin: originElement, style: style)
   }
   
   // Default adapter for Stride: FloatConvertible.
   
   public func stackedWith<S>(
     _ stackSeries: S,
-    origin: S.Element,
     style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S>
-    where S: Sequence, S.Element: Strideable, S.Element.Stride: FloatConvertible {
-      return stackedWith(stackSeries, adapter: .linear, origin: origin, style: style)
+    where S: Sequence, S.Element: BinaryFloatingPoint {
+      return stackedWith(stackSeries, adapter: .linear, style: style)
   }
   
   // Default adapter for Stride: FixedWidthInteger.
   
   public func stackedWith<S>(
     _ stackSeries: S,
-    origin: S.Element,
     style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S>
-    where S: Sequence, S.Element: Strideable, S.Element.Stride: FixedWidthInteger {
-      return stackedWith(stackSeries, adapter: .linear, origin: origin, style: style)
+    where S: Sequence, S.Element: FixedWidthInteger {
+      return stackedWith(stackSeries, adapter: .linear, style: style)
   }
 }
 
@@ -579,8 +563,7 @@ public struct StackedBarGraph<Base, SeriesType> where SeriesType: Sequence, Base
   public typealias Element = SeriesType.Element
   var base: Base
   public var values: SeriesType
-  public var adapter: StrideableAdapter<Element>
-  public var originElement: Element
+  public var adapter: BarGraphAdapter<Element>
   
   public var segmentLabel = ""
   public var segmentColor = Color.blue
@@ -612,7 +595,7 @@ extension StackedBarGraph: Plot & HasGraphLayout {
     let baseResults = base._layoutData(size: size, renderer: renderer, getStackHeight: {
       let base = getStackHeight()
       if let nextValue = it.next() {
-        let segmentHeight = adapter.distance(from: originElement, to: nextValue)
+        let segmentHeight = adapter.heightAboveOrigin(nextValue)
         if segmentHeight > 0 {
           return ((base?.0 ?? 0) + segmentHeight, base?.1 ?? 0)
         } else {
@@ -632,7 +615,7 @@ extension StackedBarGraph: Plot & HasGraphLayout {
       var shouldContinue: Bool
       // Draw our stack segment.
       if let nextValue = it.next() {
-        let segmentHeight = adapter.distance(from: originElement, to: nextValue) * layoutInfo.layout.scale
+        let segmentHeight = adapter.heightAboveOrigin(nextValue) * layoutInfo.layout.scale
         var segmentRect: Rect
         switch layoutInfo.layout.orientation {
         case .vertical:
@@ -687,42 +670,28 @@ extension StackedBarGraph: _BarGraphProtocol {
 
 extension SequencePlots {
   public func barChart(
-    adapter: StrideableAdapter<Base.Element>,
-    origin: Base.Element,
-    style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
-    var graph = BarGraph(base, adapter: adapter, origin: origin)
+    adapter: BarGraphAdapter<Base.Element>,
+    style: (inout BarGraph<Base>)->Void = { _ in }
+  ) -> BarGraph<Base> {
+    var graph = BarGraph(base, adapter: adapter)
     style(&graph)
     return graph
   }
 }
 
 // Default adapter for Stride: FloatConvertible.
-extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FloatConvertible {
+extension SequencePlots where Base.Element: BinaryFloatingPoint {
   public func barChart(
-    origin: Base.Element,
-    style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
-    return self.barChart(adapter: .linear, origin: origin, style: style)
-  }
-}
-// Default adapter and origin for Stride: FloatConvertible.
-extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FloatConvertible,
-Base.Element: ExpressibleByIntegerLiteral {
-  public func barChart(style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
-    return self.barChart(adapter: .linear, origin: 0, style: style)
+    style: (inout BarGraph<Base>)->Void = { _ in }
+  ) -> BarGraph<Base> {
+    return self.barChart(adapter: .linear, style: style)
   }
 }
 // Default adapter for Stride: FixedWidthInteger.
-extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FixedWidthInteger {
+extension SequencePlots where Base.Element: FixedWidthInteger {
   public func barChart(
-    origin: Base.Element,
-    style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
-    return self.barChart(adapter: .linear, origin: origin, style: style)
-  }
-}
-// Default adapter and origin for Stride: FixedWidthInteger
-extension SequencePlots where Base.Element: Strideable, Base.Element.Stride: FixedWidthInteger,
-Base.Element: ExpressibleByIntegerLiteral {
-  public func barChart(style: (inout BarGraph<Base>)->Void = { _ in }) -> BarGraph<Base> {
-    return self.barChart(adapter: .linear, origin: 0, style: style)
+    style: (inout BarGraph<Base>)->Void = { _ in }
+  ) -> BarGraph<Base> {
+    return self.barChart(adapter: .linear, style: style)
   }
 }
