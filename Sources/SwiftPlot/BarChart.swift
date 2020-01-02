@@ -1,6 +1,50 @@
 import Foundation
 
 fileprivate let MAX_DIV: Float = 50
+enum Markers {
+  static func linearlySpaced(
+    range: ClosedRange<Float>,
+    length: Float, scale: Float, origin: Float) -> ([Float], [String]) {
+    
+    let orderOfMagnitude = max(getNumberOfDigits(range.lowerBound), getNumberOfDigits(range.upperBound))
+    let valueInterval: Float
+    if orderOfMagnitude > 1 {
+      if range.upperBound <= pow(Float(10), Float(orderOfMagnitude - 1)) {
+        valueInterval = Float(pow(Float(10), Float(orderOfMagnitude - 2)))
+      } else {
+        valueInterval = Float(pow(Float(10), Float(orderOfMagnitude - 1)))
+      }
+    } else {
+      valueInterval = Float(pow(Float(10), Float(0)))
+    }
+    
+    var pointInterval: Float = valueInterval*scale
+    if(length/pointInterval > MAX_DIV){
+      pointInterval = (length/pointInterval)*pointInterval/MAX_DIV
+    }
+    
+    // Add locations greater than (or equal to) the origin.
+    var locations = [Float]()
+    var location = origin
+    while location <= length {
+      if location + pointInterval < 0 || location < 0 {
+        location += pointInterval
+        continue
+      }
+      locations.append(location)
+      location += pointInterval
+    }
+    // Add locations less than the origin.
+    location = origin - pointInterval
+    while location > 0 {
+      locations.append(location)
+      location -= pointInterval
+    }
+    
+    let labels = locations.map { "\( (($0 - origin) / scale ).rounded() )" }
+    return (locations, labels)
+  }
+}
 
 /// A `BarGraph` is a plot of 1-dimensional data, where each element is displayed as a bar extending from an origin.
 ///
@@ -14,7 +58,7 @@ public struct BarGraph<SeriesType> where SeriesType: Sequence {
   public var values: SeriesType
   // BarGraph layout properties.
   public var adapter: BarGraphAdapter<Element>
-  public var formatter: TextFormatter<Element> = .default
+  public var categoryLabels: TextFormatter<Element> = .default
   
   public var graphOrientation = GraphOrientation.vertical
   public var minimumSeparation = 20
@@ -50,7 +94,7 @@ extension BarGraph: _BarGraphProtocol {
   
   public typealias DrawingData = BarGraphLayoutData
   
-    // functions implementing plotting logic
+  // functions implementing plotting logic
   public func _layoutData(size: Size, renderer: Renderer, getStackHeight: ()->SeriesLayoutData?) -> (DrawingData, PlotMarkers?) {
       var results = DrawingData()
       results.orientation = graphOrientation
@@ -159,54 +203,23 @@ extension BarGraph: _BarGraphProtocol {
             print("⚠️ - Not enough space to honour minimum series separation. " +
               "Bars would be less than 1 pixel. Using \(results.seriesSeparation)")
           }
-                    
-          // - Calculate Y marker locations.
-          let nD1: Int = max(getNumberOfDigits(maxBarHeight), getNumberOfDigits(minBarHeight))
-          var v1: Float
-          if nD1 > 1 && maxBarHeight <= pow(Float(10), Float(nD1 - 1)) {
-            v1 = Float(pow(Float(10), Float(nD1 - 2)))
-          } else if (nD1 > 1) {
-            v1 = Float(pow(Float(10), Float(nD1 - 1)))
-          } else {
-            v1 = Float(pow(Float(10), Float(0)))
-          }
           
-          let nY: Float = v1*results.scale
-          var inc1: Float = nY
-          if(size.height/nY > MAX_DIV){
-            inc1 = (size.height/nY)*inc1/MAX_DIV
-          }
-          
-          var yM = results.origin.y
-          while yM <= size.height {
-            if yM + inc1 < 0 || yM < 0 {
-              yM = yM + inc1
-              continue
-            }
-            markers.yMarkers.append(yM)
-            let text = "\( ((yM - results.origin.y) / results.scale ).rounded() )"
-            markers.yMarkersText.append(text)
-            yM = yM + inc1
-          }
-          yM = results.origin.y - inc1
-          while yM>0.0 {
-            markers.yMarkers.append(yM)
-            markers.yMarkersText.append("\( ((yM - results.origin.y) / results.scale ).rounded() )")
-            yM = yM - inc1
-          }
+          (markers.yMarkers, markers.yMarkersText) = Markers.linearlySpaced(
+            range: minBarHeight...maxBarHeight,
+            length: size.height,
+            scale: results.scale, origin: results.origin.y)
           
           // - Calculate X marker locations.
           // TODO: Do not show all x-markers if there are too many bars.
-          // TODO: Allow setting x-markers.
           var i = 0
           for value in values {
             markers.xMarkers.append(results.axisMarkerLocationForBar(i))
-            markers.xMarkersText.append(formatter.callAsFunction(value, offset: i))
+            markers.xMarkersText.append(categoryLabels.callAsFunction(value, offset: i))
             i += 1
           }
           for _ in i..<columnCount {
             markers.xMarkers.append(results.axisMarkerLocationForBar(i))
-            markers.xMarkersText.append("")
+            markers.xMarkersText.append(categoryLabels.callAsFunction(nil, offset: i))
             i += 1
           }
           
@@ -265,51 +278,23 @@ extension BarGraph: _BarGraphProtocol {
           }
 
           // - Calculate X marker locations.
-          let nD1: Int = max(getNumberOfDigits(Float(maxBarHeight)), getNumberOfDigits(Float(minBarHeight)))
-          var v1: Float
-          if nD1 > 1 && maxBarHeight <= pow(Float(10), Float(nD1 - 1)) {
-            v1 = Float(pow(Float(10), Float(nD1 - 2)))
-          } else if (nD1 > 1) {
-            v1 = Float(pow(Float(10), Float(nD1 - 1)))
-          } else {
-            v1 = Float(pow(Float(10), Float(0)))
-          }
-          
-          let nX: Float = v1 * results.scale
-          var inc1: Float = nX
-          if(size.width/nX > MAX_DIV){
-            inc1 = (size.width/nX)*inc1/MAX_DIV
-          }
-          
-          var xM = results.origin.x
-          while xM<=size.width {
-            if(xM+inc1<0.0 || xM<0.0){
-              xM = xM + inc1
-              continue
-            }
-            markers.xMarkers.append(xM)
-            markers.xMarkersText.append("\( ((xM - results.origin.x) / results.scale).rounded() )")
-            xM = xM + inc1
-          }
-          xM = results.origin.x - inc1
-          while xM>0.0 {
-            markers.xMarkers.append(xM)
-            markers.xMarkersText.append("\( ((xM - results.origin.x) / results.scale).rounded() )")
-            xM = xM - inc1
-          }
+          (markers.xMarkers, markers.xMarkersText) = Markers.linearlySpaced(
+            range: minBarHeight...maxBarHeight,
+            length: size.width,
+            scale: results.scale,
+            origin: results.origin.x)
 
         // - Calculate Y marker locations.
         // TODO: Do not show all y-markers if there are too many bars.
-        // TODO: Allow setting y-markers.
         var i = 0
         for value in values {
           markers.yMarkers.append(results.axisMarkerLocationForBar(i))
-          markers.yMarkersText.append(formatter.callAsFunction(value, offset: i))
+          markers.yMarkersText.append(categoryLabels.callAsFunction(value, offset: i))
           i += 1
         }
         for _ in i..<columnCount {
           markers.yMarkers.append(results.axisMarkerLocationForBar(i))
-          markers.yMarkersText.append("")
+          markers.yMarkersText.append(categoryLabels.callAsFunction(nil, offset: i))
           i += 1
         }
       }
@@ -389,21 +374,21 @@ extension BarGraph {
 
 
 public struct TextFormatter<T> {
-  private let _format: (T, Int) -> String
-  private init(custom: @escaping (T, Int)->String) {
+  private let _format: (T?, Int) -> String
+  private init(custom: @escaping (T?, Int)->String) {
     self._format = custom
   }
   
-  public func callAsFunction(_ val: T, offset: Int) -> String {
+  public func callAsFunction(_ val: T?, offset: Int) -> String {
     _format(val, offset)
   }
   public static var `default`: TextFormatter<T> {
-    return TextFormatter { val, idx in String(describing: val) }
+    return TextFormatter { val, idx in val.map { String(describing: $0) } ?? "" }
   }
   public static var index: TextFormatter<T> {
     return TextFormatter { _, idx in String(idx) }
   }
-  public static func custom(_ formatter: @escaping (T, Int)->String) -> TextFormatter<T> {
+  public static func custom(_ formatter: @escaping (T?, Int)->String) -> TextFormatter<T> {
     return TextFormatter(custom: formatter)
   }
   public static func array<C>(_ array: C) -> TextFormatter<T>
@@ -606,6 +591,7 @@ extension _BarGraphChildProtocol {
   
   public var layout: GraphLayout {
      get { return parent.layout }
+     _modify { yield &parent.layout }
      set { parent.layout = newValue }
    }
   
@@ -622,36 +608,31 @@ extension _BarGraphChildProtocol {
 
 public struct StackedBarGraph<Base, SeriesType> where SeriesType: Sequence, Base: _BarGraphProtocol {
   public typealias Element = SeriesType.Element
-  var base: Base
+  
+  fileprivate var dataKind: DataKind
+  public var parent: Base
   public var values: SeriesType
   public var adapter: BarGraphAdapter<Element>
-  var dataKind: DataKind
   
-  public var segmentLabel = ""
-  public var segmentColor = Color.blue
-  public var segmentHatchPattern = BarGraphSeriesOptions.Hatching.none
+  public var label = ""
+  public var color = Color.blue
+  public var hatchPattern = BarGraphSeriesOptions.Hatching.none
   
-  enum DataKind {
+  fileprivate enum DataKind {
     case stack
     case series
   }
 }
 
 extension StackedBarGraph: _BarGraphChildProtocol {
-  
-  public var parent: Base {
-    get { return base }
-    _modify { yield &base }
-    set { base = newValue }
-  }
 
   public struct DrawingData {
     var baseData: Base.DrawingData!
   }
   
   public func _appendLegendLabel(to: inout [(String, LegendIcon)]) {
-    to.append((segmentLabel, .square(segmentColor)))
-    base._appendLegendLabel(to: &to)
+    to.append((label, .square(color)))
+    parent._appendLegendLabel(to: &to)
   }
   
   public func _layoutData(size: Size, renderer: Renderer,
@@ -661,7 +642,7 @@ extension StackedBarGraph: _BarGraphChildProtocol {
     // but wrap the closure we were given (from higher up) so we add the next value
     // of our height each time it is executed.
     var it = values.makeIterator()
-    let baseResults = base._layoutData(size: size, renderer: renderer, getStackHeight: {
+    let baseResults = parent._layoutData(size: size, renderer: renderer, getStackHeight: {
       
       // Get the info from all the data above us.
       let base = getStackHeight()
@@ -703,7 +684,7 @@ extension StackedBarGraph: _BarGraphChildProtocol {
     // but wrap the closure we were given (from higher up) so we draw the next value
     // of our height before letting the next stack draw its segment.
     var it = values.makeIterator()
-    base._drawData(data.baseData, size: size, renderer: renderer, drawStack: { layoutInfo in
+    parent._drawData(data.baseData, size: size, renderer: renderer, drawStack: { layoutInfo in
       switch dataKind {
       case .series:
         // If this is a series node, *always* advance the axis location.
@@ -743,7 +724,7 @@ extension StackedBarGraph: _BarGraphChildProtocol {
             layoutInfo.positiveValueHeight += segmentHeight
           }
         }
-        renderer.drawSolidRect(segmentRect.normalized, fillColor: segmentColor, hatchPattern: segmentHatchPattern)
+        renderer.drawSolidRect(segmentRect.normalized, fillColor: color, hatchPattern: hatchPattern)
         
         // Draw the next segment in the chain.
         return drawStack(&layoutInfo)
@@ -793,7 +774,7 @@ extension _BarGraphProtocol {
     adapter: BarGraphAdapter<S.Element>,
     style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S>
     where S: Sequence {
-      var stack = StackedBarGraph(base: self, values: stackSeries, adapter: adapter, dataKind: .stack)
+      var stack = StackedBarGraph(dataKind: .stack, parent: self, values: stackSeries, adapter: adapter)
       style(&stack)
       return stack
   }
@@ -820,7 +801,7 @@ extension _BarGraphProtocol {
     adapter: BarGraphAdapter<S.Element>,
     style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S>
     where S: Sequence {
-    var stack = StackedBarGraph(base: self, values: stackSeries, adapter: adapter, dataKind: .series)
+      var stack = StackedBarGraph(dataKind: .series, parent: self, values: stackSeries, adapter: adapter)
     style(&stack)
     return stack
   }
