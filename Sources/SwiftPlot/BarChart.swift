@@ -44,6 +44,26 @@ enum Markers {
     let labels = locations.map { "\( (($0 - origin) / scale ).rounded() )" }
     return (locations, labels)
   }
+  
+  /// Produces markers by formatting the provided values with `formatter`. Locations are determined by the provided closure.
+  /// If `count` is greater than the number of elements in `values`, markers will be added with the formatter's empty-value String.
+  static func formatting<S>(values: S, formatter: TextFormatter<S.Element>,
+                            count: Int, location: (Int)->Float) -> ([Float], [String]) where S: Sequence {
+    var locations = [Float]()
+    var labels    = [String]()
+    locations.reserveCapacity(count)
+    labels.reserveCapacity(count)
+    
+    for (i, value) in values.enumerated() {
+      locations.append(location(i))
+      labels.append(formatter.callAsFunction(value, offset: i))
+    }
+    for i in locations.count..<count {
+      locations.append(location(i))
+      labels.append(formatter.callAsFunction(nil, offset: i))
+    }
+    return (locations, labels)
+  }
 }
 
 /// A `BarGraph` is a plot of 1-dimensional data, where each element is displayed as a bar extending from an origin.
@@ -211,17 +231,10 @@ extension BarGraph: _BarGraphProtocol {
           
           // - Calculate X marker locations.
           // TODO: Do not show all x-markers if there are too many bars.
-          var i = 0
-          for value in values {
-            markers.xMarkers.append(results.axisMarkerLocationForBar(i))
-            markers.xMarkersText.append(categoryLabels.callAsFunction(value, offset: i))
-            i += 1
-          }
-          for _ in i..<columnCount {
-            markers.xMarkers.append(results.axisMarkerLocationForBar(i))
-            markers.xMarkersText.append(categoryLabels.callAsFunction(nil, offset: i))
-            i += 1
-          }
+          (markers.xMarkers, markers.xMarkersText) = Markers.formatting(
+            values: values, formatter: categoryLabels,
+            count: columnCount, location: results.axisMarkerLocationForBar)
+          
           
         case .horizontal:
           // - Calculate margins, origin, scale, etc.
@@ -286,17 +299,9 @@ extension BarGraph: _BarGraphProtocol {
 
         // - Calculate Y marker locations.
         // TODO: Do not show all y-markers if there are too many bars.
-        var i = 0
-        for value in values {
-          markers.yMarkers.append(results.axisMarkerLocationForBar(i))
-          markers.yMarkersText.append(categoryLabels.callAsFunction(value, offset: i))
-          i += 1
-        }
-        for _ in i..<columnCount {
-          markers.yMarkers.append(results.axisMarkerLocationForBar(i))
-          markers.yMarkersText.append(categoryLabels.callAsFunction(nil, offset: i))
-          i += 1
-        }
+        (markers.yMarkers, markers.yMarkersText) = Markers.formatting(
+          values: values, formatter: categoryLabels,
+          count: columnCount, location: results.axisMarkerLocationForBar)
       }
       return (results, markers)
   }
