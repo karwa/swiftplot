@@ -19,17 +19,17 @@ extension BarchartTests {
       .barChart() {
         $0.label = "Existing product"
         $0.color = .orange
-        $0.formatter = .custom { String(2000 + $1) }
+        $0.categoryLabels = .custom { String(2000 + $1) }
         
         $0.plotTitle.title  = "Financial Results"
         $0.plotLabel.xLabel = "Year"
         $0.plotLabel.yLabel = "Profit ($m)"
     }.stackedWith((0..<15)) {
-      $0.segmentLabel = "New product"
-      $0.segmentColor = .green
+      $0.label = "New product"
+      $0.color = .green
     }.stackedWith(-10..<1) {
-      $0.segmentLabel = "Bad product"
-      $0.segmentColor = .red
+      $0.label = "Bad product"
+      $0.color = .red
     }
     try renderAndVerify(barGraph)
   }
@@ -40,18 +40,18 @@ extension BarchartTests {
       .barChart() {
         $0.label = "Existing product"
         $0.color = .orange
-        $0.formatter = .custom { String(2000 + $1) }
+        $0.categoryLabels = .custom { String(2000 + $1) }
         
         $0.graphOrientation = .horizontal
         $0.plotTitle.title  = "Financial Results"
         $0.plotLabel.xLabel = "Profit ($m)"
         $0.plotLabel.yLabel = "Year"
     }.stackedWith((0..<15)) {
-      $0.segmentLabel = "New product"
-      $0.segmentColor = .green
+      $0.label = "New product"
+      $0.color = .green
     }.stackedWith(-10..<1) {
-      $0.segmentLabel = "Bad product"
-      $0.segmentColor = .red
+      $0.label = "Bad product"
+      $0.color = .red
     }
     try renderAndVerify(barGraph)
   }
@@ -73,16 +73,16 @@ extension BarchartTests {
         $0.minimumSeparation = 40
         $0.label = "Liked"
         $0.color = .orange
-        $0.formatter = .array(factors)
+        $0.categoryLabels = .array(factors)
     }.stackedWith(likes) {
-      $0.segmentLabel = "Strongly liked"
-      $0.segmentColor = .green
+      $0.label = "Strongly liked"
+      $0.color = .green
     }.stackedWith(dislikes) {
-      $0.segmentLabel = "Disliked"
-      $0.segmentColor = .red
+      $0.label = "Disliked"
+      $0.color = .red
     }.stackedWith(haters, adapter: .keyPath(\.value)) {
-      $0.segmentLabel = "Strongly disliked"
-      $0.segmentColor = .darkRed
+      $0.label = "Strongly disliked"
+      $0.color = .darkRed
     }
     try renderAndVerify(barGraph)
   }
@@ -105,16 +105,16 @@ extension BarchartTests {
         $0.minimumSeparation = 40
         $0.label = "Liked"
         $0.color = .orange
-        $0.formatter = .array(factors)
+        $0.categoryLabels = .array(factors)
     }.stackedWith(likes) {
-      $0.segmentLabel = "Strongly liked"
-      $0.segmentColor = .green
+      $0.label = "Strongly liked"
+      $0.color = .green
     }.stackedWith(dislikes) {
-      $0.segmentLabel = "Disliked"
-      $0.segmentColor = .red
+      $0.label = "Disliked"
+      $0.color = .red
     }.stackedWith(haters, adapter: .keyPath(\.value)) {
-      $0.segmentLabel = "Strongly disliked"
-      $0.segmentColor = .darkRed
+      $0.label = "Strongly disliked"
+      $0.color = .darkRed
     }
     try renderAndVerify(barGraph)
   }
@@ -133,11 +133,11 @@ extension BarchartTests {
         $0.minimumSeparation = 4
         $0.graphOrientation = orientation
     }.stackedWith((-25...10).reversed()) {
-      $0.segmentLabel = "Stack"
-      $0.segmentColor = .pink
+      $0.label = "Stack"
+      $0.color = .pink
     }.stackedWith((-25...20)) {
-      $0.segmentLabel = "Stack 2"
-      $0.segmentColor = .brown
+      $0.label = "Stack 2"
+      $0.color = .brown
     }
   }
   
@@ -158,14 +158,14 @@ extension BarchartTests {
       .barChart() {
         $0.label = "Base"
         $0.color = .darkRed
-        $0.formatter = .index
+        $0.categoryLabels = .index
         $0.graphOrientation = orientation
     }.stackedWith((-9...0).reversed()) {
-      $0.segmentLabel = "Stack"
-      $0.segmentColor = .pink
+      $0.label = "Stack"
+      $0.color = .pink
     }.stackedWith((-5...0)) {
-      $0.segmentLabel = "Stack 2"
-      $0.segmentColor = .brown
+      $0.label = "Stack 2"
+      $0.color = .brown
     }
   }
   
@@ -185,14 +185,14 @@ extension BarchartTests {
       .barChart() {
         $0.label = "Base"
         $0.color = .darkRed
-        $0.formatter = .index
+        $0.categoryLabels = .index
         $0.graphOrientation = orientation
     }.stackedWith((0..<10)) {
-      $0.segmentLabel = "Stack"
-      $0.segmentColor = .pink
+      $0.label = "Stack"
+      $0.color = .pink
     }.stackedWith((0...5).reversed()) {
-      $0.segmentLabel = "Stack 2"
-      $0.segmentColor = .brown
+      $0.label = "Stack 2"
+      $0.color = .brown
     }
   }
   
