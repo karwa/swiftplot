@@ -376,14 +376,7 @@ extension BarGraph: _BarGraphProtocol {
 }
 
 extension BarGraph {
-  public typealias _Parent = Self
   public typealias _RootBarGraphSeriesType = SeriesType
-  
-  public var parent: Self {
-    get { return self }
-    _modify { yield &self }
-    set { self = newValue }
-  }
   public var barGraph: BarGraph<SeriesType> {
     get { return self }
     _modify { yield &self }
@@ -529,11 +522,24 @@ public struct SeriesLayoutData {
   var negativeValueHeight: Float = 0
 }
 
+
+// MARK: - BarGraphProtocol and defaults.
+
+
 /// This protocol exists to support BarGraph.
 /// Do not try to conform to this protocol.
 public protocol _BarGraphProtocol: Plot, HasGraphLayout {
   
-// Chained HasGraphLayout:
+// Chained HasGraphLayout.
+// -----------------------
+//
+// BarGraphProtocol works by mirroring the layout/drawing calls from `HasGraphLayout`, with
+// versions that allow passing information down to the root BarGraph<T>.
+//
+// Each layer of the stack gets a closure from its children, wraps it in a closure which
+// incorporates its own data, and (except for the root BarGraph<T>), passes that wrapped closure
+// down to its parent. Eventually, the root BarGraph<T> will call this closure to communicate
+// with its children.
   
   // Appends legend information for this segment to the given array.
   func _appendLegendLabel(to: inout [(String, LegendIcon)])
@@ -548,14 +554,6 @@ public protocol _BarGraphProtocol: Plot, HasGraphLayout {
   // Update the `BarLayoutData` to let successive segments know the positive/negative bar height.
   func _drawData(_ data: DrawingData, size: Size, renderer: Renderer,
                  drawStack: (inout BarLayoutData)->Bool)
- 
-// Chain traversal:
-  
-  associatedtype _Parent: _BarGraphProtocol
-  
-  /// The stack or series below this element of the `BarGraph`.
-  /// The root `BarGraph` is its own parent, so this chain never terminates.
-  var parent: _Parent { get set }
   
   // A magic associated type which gets funnelled down the chain of generic wrappers,
   // finally terminating at the root `BarGraph`
@@ -563,15 +561,9 @@ public protocol _BarGraphProtocol: Plot, HasGraphLayout {
   
   /// The `BarGraph`.
   var barGraph: BarGraph<_RootBarGraphSeriesType> { get set }
-
-// Segment properties:
-  
-  associatedtype Element
-  var adapter: BarGraphAdapter<Element> { get set }
 }
 
-// Implement HasGraphLayout requirements in terms of our custom versions.
-
+// Forward `HasGraphLayout` requirements to our chaining versions.
 extension _BarGraphProtocol {
   
   public var legendLabels: [(String, LegendIcon)] {
@@ -583,15 +575,34 @@ extension _BarGraphProtocol {
   
   public func layoutData(size: Size, renderer: Renderer) -> (DrawingData, PlotMarkers?) {
     // This gets called when we are at the top of the stack.
-    // Delegate to our own chain of layout functions and terminate the closure-chain.
+    // We have no children, so the closure we pass in terminates the chain.
     return _layoutData(size: size, renderer: renderer, getStackHeight: { nil })
   }
   
   public func drawData(_ data: DrawingData, size: Size, renderer: Renderer) {
     // This gets called when we are at the top of the stack.
-    // Delegate to our own chain of layout functions and terminate the closure-chain.
+    // We have no children, so the closure we pass in terminates the chain.
     _drawData(data, size: size, renderer: renderer, drawStack: { _ in false })
   }
+}
+
+/// This protocol exists to support BarGraph.
+/// Do not try to conform to this protocol.
+public protocol _BarGraphChildProtocol: _BarGraphProtocol {
+
+// Chain traversal.
+// ----------------
+//
+// This protocol has been split from BarGraphProtocol so that the root
+// BarGraph<T> itself doesn't need to have a parent.
+  
+  associatedtype _Parent: _BarGraphProtocol
+  
+  /// The stack or series below this element of the `BarGraph`.
+  var parent: _Parent { get set }
+}
+
+extension _BarGraphChildProtocol {
   
   public var layout: GraphLayout {
      get { return parent.layout }
@@ -605,69 +616,8 @@ extension _BarGraphProtocol {
   }
 }
 
-extension _BarGraphProtocol {
-  
-  public __consuming func style(_ styleBlock: (inout Self)->Void) -> Self {
-    var edited = self
-    styleBlock(&edited)
-    return edited
-  }
-  
-  // Basic initializer.
-  
-  public func stackedWith<S>(
-    _ stackSeries: S,
-    adapter: BarGraphAdapter<S.Element>,
-    style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S> where S: Sequence {
-    var stack = StackedBarGraph(base: self, values: stackSeries, adapter: adapter, dataKind: .stack)
-    style(&stack)
-    return stack
-  }
-  
-  // Default adapter for BinaryFloatingPoint.
-  
-  public func stackedWith<S>(
-    _ stackSeries: S,
-    style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S>
-    where S: Sequence, S.Element: BinaryFloatingPoint {
-      return stackedWith(stackSeries, adapter: .linear, style: style)
-  }
-  
-  // Default adapter for FixedWidthInteger.
-  
-  public func stackedWith<S>(
-    _ stackSeries: S,
-    style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S>
-    where S: Sequence, S.Element: FixedWidthInteger {
-      return stackedWith(stackSeries, adapter: .linear, style: style)
-  }
-  
-  
-  
-  // SERIES ---------------------
-  
-  public func addSeries<S>(
-    _ stackSeries: S,
-    adapter: BarGraphAdapter<S.Element>,
-    style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S> where S: Sequence {
-    var stack = StackedBarGraph(base: self, values: stackSeries, adapter: adapter, dataKind: .series)
-    style(&stack)
-    return stack
-  }
-}
 
-
-
-
-
-
-
-
-
-
-
-
-// - StackedBarGraph.
+// MARK: - StackedBarGraph.
 
 
 public struct StackedBarGraph<Base, SeriesType> where SeriesType: Sequence, Base: _BarGraphProtocol {
@@ -687,9 +637,7 @@ public struct StackedBarGraph<Base, SeriesType> where SeriesType: Sequence, Base
   }
 }
 
-extension StackedBarGraph: _BarGraphProtocol {
-  
-  public typealias _Parent = Base
+extension StackedBarGraph: _BarGraphChildProtocol {
   
   public var parent: Base {
     get { return base }
@@ -805,6 +753,9 @@ extension StackedBarGraph: _BarGraphProtocol {
 }
 
 
+// MARK: - SequencePlots and stacking API.
+
+
 extension SequencePlots {
   public func barChart(
     adapter: BarGraphAdapter<Base.Element>,
@@ -824,11 +775,69 @@ extension SequencePlots where Base.Element: BinaryFloatingPoint {
     return self.barChart(adapter: .linear, style: style)
   }
 }
+
 // Default adapter for Stride: FixedWidthInteger.
 extension SequencePlots where Base.Element: FixedWidthInteger {
   public func barChart(
     style: (inout BarGraph<Base>)->Void = { _ in }
   ) -> BarGraph<Base> {
     return self.barChart(adapter: .linear, style: style)
+  }
+}
+
+extension _BarGraphProtocol {
+  
+  // Stacking.
+  public func stackedWith<S>(
+    _ stackSeries: S,
+    adapter: BarGraphAdapter<S.Element>,
+    style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S>
+    where S: Sequence {
+      var stack = StackedBarGraph(base: self, values: stackSeries, adapter: adapter, dataKind: .stack)
+      style(&stack)
+      return stack
+  }
+  
+  // Default adapter for BinaryFloatingPoint.
+  public func stackedWith<S>(
+    _ stackSeries: S,
+    style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S>
+    where S: Sequence, S.Element: BinaryFloatingPoint {
+      return stackedWith(stackSeries, adapter: .linear, style: style)
+  }
+  
+  // Default adapter for FixedWidthInteger.
+  public func stackedWith<S>(
+    _ stackSeries: S,
+    style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S>
+    where S: Sequence, S.Element: FixedWidthInteger {
+      return stackedWith(stackSeries, adapter: .linear, style: style)
+  }
+  
+  // Series.
+  public func alongside<S>(
+    _ stackSeries: S,
+    adapter: BarGraphAdapter<S.Element>,
+    style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S>
+    where S: Sequence {
+    var stack = StackedBarGraph(base: self, values: stackSeries, adapter: adapter, dataKind: .series)
+    style(&stack)
+    return stack
+  }
+  
+  // Default adapter for BinaryFloatingPoint.
+  public func alongside<S>(
+    _ stackSeries: S,
+    style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S>
+    where S: Sequence, S.Element: BinaryFloatingPoint {
+      return alongside(stackSeries, adapter: .linear, style: style)
+  }
+  
+  // Default adapter for FixedWidthInteger.
+  public func alongside<S>(
+    _ stackSeries: S,
+    style: (inout StackedBarGraph<Self, S>)->Void = { _ in }) -> StackedBarGraph<Self, S>
+    where S: Sequence, S.Element: FixedWidthInteger {
+      return alongside(stackSeries, adapter: .linear, style: style)
   }
 }
