@@ -1,56 +1,35 @@
 import XCTest
 import SwiftPlot
-import SVGRenderer
-#if canImport(AGGRenderer)
-import AGGRenderer
-#endif
-#if canImport(QuartzRenderer)
-import QuartzRenderer
-#endif
-
-struct MyStruct {
-  var val: Int
-}
-
 
 @available(tvOS 13.0, watchOS 6.0, *)
 final class HeatmapTests: SwiftPlotTestCase {
   
-  func testHeatmap() throws {
     // Example from:
-    // https://scipython.com/book/chapter-7-matplotlib/examples/a-heatmap-of-boston-temperatures/
-    let data: [[Float]] = median_daily_temp_boston_2012
-    let heatmap = data.plots.heatmap() {
-        $0.plotTitle.title = "Maximum daily temperatures in Boston, 2012"
-        $0.plotLabel.xLabel = "Day of the Month"
-        $0.colorMap = ColorMap.fiveColorHeatMap.lightened(by: 0.35)
-        $0.showGrid = true
-        $0.grid.color = Color.gray.withAlpha(0.65)
+	// https://scipython.com/book/chapter-7-matplotlib/examples/a-heatmap-of-boston-temperatures/
+    func testHeatmap() throws {
+        let data: [[Float]] = median_daily_temp_boston_2012
+        let heatmap = data.plots.heatmap() {
+            $0.plotTitle.title = "Maximum daily temperatures in Boston, 2012"
+            $0.plotLabel.xLabel = "Day of the Month"
+            $0.colorMap = ColorMap.fiveColorHeatMap.lightened(by: 0.35)
+            $0.showGrid = true
+            $0.grid.color = Color.gray.withAlpha(0.65)
+        }
+        try renderAndVerify(heatmap, size: Size(width: 900, height: 450))
     }
-    try renderAndVerify(heatmap, size: Size(width: 900, height: 450))
-  }
   
-  func testHeatmap2() throws {
-    
-    let summer = median_daily_temp_boston_2012[5...7].plots.heatmap() {
-        $0.colorMap = ColorMap.viridis//.lightened(by: 0.2)
-        $0.showGrid = true
+    // Tests inverted mapping.
+    func testHeatmap_invertedMapping() throws {
+        let data: [[Float]] = median_daily_temp_boston_2012
+        let heatmap = data.plots.heatmap(mapping: Mapping.Heatmap.linear.inverted) {
+            $0.plotTitle.title = "Maximum daily temperatures in Boston, 2012"
+            $0.plotLabel.xLabel = "Day of the Month"
+            $0.colorMap = ColorMap.fiveColorHeatMap.lightened(by: 0.35)
+            $0.showGrid = true
+            $0.grid.color = Color.gray.withAlpha(0.65)
+        }
+        try renderAndVerify(heatmap, size: Size(width: 900, height: 450))
     }
-    try renderAndVerify(summer, size: Size(width: 900, height: 450))
-  }
-  
-  func testHeatmap3() throws {
-    let x:[String] = ["2008","2009","2010","2011"]
-    let y:[Float] = [320,-100,420,500]
-
-    var barGraph = BarGraph<String,Float>(enableGrid: true)
-    barGraph.addSeries(x, y, label: "Plot 1", color: .orange)
-    barGraph.plotTitle = PlotTitle("")
-    barGraph.plotLabel = PlotLabel(xLabel: "", yLabel: "")
-    barGraph.markerTextSize = 0
-
-    try renderAndVerify(barGraph)
-  }
 }
 
 
