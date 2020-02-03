@@ -24,3 +24,14 @@ jobs:
       with:
         name: images
         path: /private/var/tmp/swiftplot/
+    - name: Generate Documentation
+      uses: SwiftDocOrg/swift-doc@master
+      with:
+        inputs: "Source"
+        output: "Documentation"
+    - name: Upload Documentation to Wiki
+      uses: SwiftDocOrg/github-wiki-publish-action@master
+      with:
+        path: "Documentation"
+      env:
+        GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_PERSONAL_ACCESS_TOKEN }}

@@ -14,6 +14,10 @@ final class HeatmapTests: SwiftPlotTestCase {
             $0.colorMap = ColorMap.fiveColorHeatMap.lightened(by: 0.35)
             $0.showGrid = true
             $0.grid.color = Color.gray.withAlpha(0.65)
+            
+            $0.yFormatter = { String($0.first!) }
+            $0.xFormatter = { String($0) }
+            $0.valueFormatter = { String($0) }
         }
         try renderAndVerify(heatmap, size: Size(width: 900, height: 450))
     }
@@ -29,6 +33,40 @@ final class HeatmapTests: SwiftPlotTestCase {
             $0.grid.color = Color.gray.withAlpha(0.65)
         }
         try renderAndVerify(heatmap, size: Size(width: 900, height: 450))
+    }
+    
+    enum Produce {
+        case lettuce
+        case cucumbers
+        case tomatoes
+    }
+    
+    struct Farmer {
+        var name: String = ""
+        var harvests: [(Produce, Int)] = []
+        var ages: [Int] = []
+    }
+    
+    func testHeatmap_keypath() throws {
+        let x: [Farmer] = [
+            Farmer(name: "Jimbo", harvests: [(.lettuce, 80), (.cucumbers, 60), (.tomatoes, 60)]),
+            Farmer(name: "Jones", harvests: [(.lettuce, 10), (.cucumbers, 20), (.tomatoes, 30)]),
+        ]
+        
+        let hm2 = x.plots.heatmap(inner: \.ages) { hm in
+            hm.yFormatter = { y in y.base.name }
+            hm.xFormatter = { x in x.byteSwapped.description }
+            hm.valueFormatter = { $0.description }
+        }
+        
+        let hm = x.plots.heatmap(inner: \.harvests,
+                                 mapping: .keyPath(\.1)) {
+            $0.xFormatter = { thing in String(describing: thing.0) }
+            $0.yFormatter = { thing in String(thing.base.name) }
+            $0.valueFormatter = { kvp in String(kvp.1) }
+        }
+
+        try renderAndVerify(hm)
     }
 }
 

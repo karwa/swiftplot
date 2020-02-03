@@ -4,6 +4,9 @@
 // - Setting element label
 // - Displaying colormap next to plot
 
+public struct AxesFormatter<T> {
+}
+
 /// A heatmap is a plot of 2-dimensional data, where each value is assigned a colour value along a gradient.
 ///
 /// Use the `mapping` property to control how values are graded. For example, if your data structure has
@@ -24,6 +27,10 @@ public struct Heatmap<SeriesType> where SeriesType: Sequence, SeriesType.Element
     public var values: SeriesType
     public var mapping: Mapping.Heatmap<Element>
     public var colorMap: ColorMap = .fiveColorHeatMap
+
+    public var xFormatter: (Element) -> String = { _ in "" }
+    public var yFormatter: (SeriesType.Element) -> String = { _ in "" }
+    public var valueFormatter: (Element) -> String = { _ in "" }
 
     public init(
         _ values: SeriesType, mapping: Mapping.Heatmap<Element>,
@@ -118,6 +125,14 @@ extension Heatmap: HasGraphLayout, Plot {
         // TODO: Allow setting the marker text.
         markers.xMarkersText = (0..<results.columns).map { String($0) }
         markers.yMarkersText = (0..<results.rows).map { String($0) }
+        for row in values {
+            markers.yMarkersText.append(yFormatter(row))
+            for column in row {
+                markers.xMarkersText.append(xFormatter(column))
+            }
+        }
+        //    markers.xMarkersText = (0..<results.columns).map { String($0) }
+        //    markers.yMarkersText = (0..<results.rows).map    { String($0) }
 
         return (results, markers)
     }
@@ -136,7 +151,13 @@ extension Heatmap: HasGraphLayout, Plot {
                 let offset = mapping.interpolate(element, range.min, range.max)
                 let color = colorMap.colorForOffset(offset)
                 renderer.drawSolidRect(rect, fillColor: color, hatchPattern: .none)
-                // TODO: Element text.
+                renderer.drawText(
+                    text: valueFormatter(element),
+                    location: rect.center,
+                    textSize: 10,
+                    color: .black,
+                    strokeWidth: 2,
+                    angle: 0)
             }
         }
     }
@@ -274,6 +295,53 @@ extension SequencePlots where Base: Collection, HeatmapConstraints.IsInteger<Bas
 }
 
 // 1D Datasets (RandomAccessCollection).
+
+public struct Projected<Base, Element> {
+    public var base: Base
+    public var element: Element
+}
+extension Projected: Equatable where Base: Equatable, Element: Equatable {}
+extension Projected: Hashable where Base: Hashable, Element: Hashable {}
+
+extension Projected: Sequence where Element: Sequence {
+    public typealias Iterator = Element.Iterator
+    public typealias Element = Element.Element
+    public func makeIterator() -> Iterator {
+        return element.makeIterator()
+    }
+}
+
+extension SequencePlots {
+
+    public typealias LazyMapHeatMap<Base, T> = Heatmap<
+        LazyMapSequence<Base, Projected<Base.Element, T>>
+    > where Base: Sequence, T: Sequence
+
+    public func heatmap<T>(
+        inner: KeyPath<Base.Element, T>,
+        mapping: Mapping.Heatmap<T.Element>,
+        style: (inout LazyMapHeatMap<Base, T>) -> Void = { _ in }
+    ) -> LazyMapHeatMap<Base, T> where T: Sequence {
+
+        // Instead of just lazy-mapping, wrap the sequence elements in a "Projected" wrapper
+        // which allows better formatting.
+        return base.lazy.map { Projected(base: $0, element: $0[keyPath: inner]) }
+            .plots.heatmap(mapping: mapping, style: style)
+    }
+
+    public func heatmap<T>(
+        inner: KeyPath<Base.Element, T>,
+        style: (inout LazyMapHeatMap<Base, T>) -> Void = { _ in }
+    ) -> LazyMapHeatMap<Base, T> where T: Sequence, HeatmapConstraints.IsFloat<T.Element>: Any {
+        return heatmap(inner: inner, mapping: .linear, style: style)
+    }
+    public func heatmap<T>(
+        inner: KeyPath<Base.Element, T>,
+        style: (inout LazyMapHeatMap<Base, T>) -> Void = { _ in }
+    ) -> LazyMapHeatMap<Base, T> where T: Sequence, HeatmapConstraints.IsInteger<T.Element>: Any {
+        return heatmap(inner: inner, mapping: .linear, style: style)
+    }
+}
 
 extension SequencePlots where Base: RandomAccessCollection {
 
