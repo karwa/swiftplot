@@ -26,11 +26,13 @@ jobs:
         path: /private/var/tmp/swiftplot/
     - name: Generate Documentation
       uses: SwiftDocOrg/swift-doc@master
+      if: always()
       with:
         inputs: "Source"
         output: "Documentation"
     - name: Upload Documentation to Wiki
       uses: SwiftDocOrg/github-wiki-publish-action@master
+      if: always()
       with:
         path: "Documentation"
       env:
