@@ -70,3 +70,6 @@ fastlane/test_output
 
 Notebooks/.ipynb_checkpoints/
 **/.DS_Store
+
+# swiftplot test output
+output/**
